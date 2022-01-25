@@ -1,4 +1,4 @@
-module github.com/mkmkik/binlog
+module github.com/mkmik/binlog
 
 go 1.17
 
