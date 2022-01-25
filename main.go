@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/binary"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -29,17 +30,21 @@ func readEntries(r io.Reader) ([]v1.GrpcLogEntry, error) {
 	for {
 		hdr := make([]byte, 4)
 		if _, err := io.ReadFull(r, hdr); err != nil {
-			if err == io.EOF {
+			if errors.Is(err, io.ErrUnexpectedEOF) {
 				break
 			}
-			return nil, err
+			return nil, fmt.Errorf("error reading count: %w", err)
 		}
 
 		size := binary.BigEndian.Uint32(hdr)
 
 		body := make([]byte, size)
 		if _, err := io.ReadFull(r, body); err != nil {
-			return nil, err
+			if errors.Is(err, io.ErrUnexpectedEOF) {
+				log.Printf("last entry truncated, ignoring")
+				return res, nil
+			}
+			return nil, fmt.Errorf("error reading body: %#v %w", err, err)
 		}
 		var entry v1.GrpcLogEntry
 		if err := proto.Unmarshal(body, &entry); err != nil {
@@ -67,6 +72,7 @@ func mainE(filename string, protoFileName string, importPaths []string) error {
 	defer f.Close()
 
 	entries, err := readEntries(f)
+	log.Printf("Got %d entries", len(entries))
 	if err != nil {
 		return err
 	}
