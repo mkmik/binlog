@@ -9,11 +9,16 @@ import (
 	"log"
 	"os"
 
+	"github.com/jhump/protoreflect/desc"
 	"github.com/jhump/protoreflect/desc/protoparse"
 	"github.com/mkmik/stringlist"
 	v1 "google.golang.org/grpc/binarylog/grpc_binarylog_v1"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protodesc"
+	"google.golang.org/protobuf/reflect/protoreflect"
+	"google.golang.org/protobuf/reflect/protoregistry"
+	"google.golang.org/protobuf/types/dynamicpb"
 )
 
 var (
@@ -55,6 +60,18 @@ func readEntries(r io.Reader) ([]v1.GrpcLogEntry, error) {
 	return res, nil
 }
 
+func registerFileDescriptors(fds []*desc.FileDescriptor) error {
+	for _, fd := range fds {
+		fdp := fd.AsFileDescriptorProto()
+		fdr, err := protodesc.NewFile(fdp, nil)
+		if err != nil {
+			return err
+		}
+		protoregistry.GlobalFiles.RegisterFile(fdr)
+	}
+	return nil
+}
+
 func mainE(filename string, protoFileName string, importPaths []string) error {
 	p := &protoparse.Parser{
 		ImportPaths: importPaths,
@@ -63,7 +80,9 @@ func mainE(filename string, protoFileName string, importPaths []string) error {
 	if err != nil {
 		return err
 	}
-	_ = fds
+	if err := registerFileDescriptors(fds); err != nil {
+		return err
+	}
 
 	f, err := os.Open(filename)
 	if err != nil {
@@ -100,8 +119,19 @@ func mainE(filename string, protoFileName string, importPaths []string) error {
 	for _, i := range calls {
 		c := byCall[i]
 		fmt.Printf("%s %s:\n", c.Timestamp(), c.MethodName())
-		fmt.Println(c.RawRequest())
-		fmt.Println(c.RawResponse())
+		req, err := c.FormatRequest()
+		if err != nil {
+			fmt.Printf("cannot marshal request: %v\n", err)
+		} else {
+			fmt.Printf("-> %s\n", req)
+		}
+
+		res, err := c.FormatResponse()
+		if err != nil {
+			fmt.Printf("cannot marshal response: %v\n", err)
+		} else {
+			fmt.Printf("<- %s\n", res)
+		}
 
 		fmt.Println()
 	}
@@ -129,6 +159,59 @@ func (c conversation) RawRequest() []byte {
 
 func (c conversation) RawResponse() []byte {
 	return c.responseMessage.GetMessage().GetData()
+}
+
+func (c conversation) FormatRequest() ([]byte, error) {
+	msgType, err := c.RequestMessageType()
+	if err != nil {
+		return nil, err
+	}
+	return Format(c.RawRequest(), msgType)
+}
+
+func (c conversation) FormatResponse() ([]byte, error) {
+	msgType, err := c.ResponseMessageType()
+	if err != nil {
+		return nil, err
+	}
+	return Format(c.RawResponse(), msgType)
+}
+
+func (c conversation) RequestMessageType() (string, error) {
+	return "helloworld.HelloRequest", nil
+}
+
+func (c conversation) ResponseMessageType() (string, error) {
+	return "helloworld.HelloReply", nil
+}
+
+func Format(raw []byte, messageType string) ([]byte, error) {
+	msg, err := Parse(raw, messageType)
+	if err != nil {
+		return nil, err
+	}
+
+	res, err := protojson.Marshal(msg)
+	if err != nil {
+		return nil, fmt.Errorf("cannot marshal dynamic proto: %w", err)
+	}
+	return res, nil
+}
+
+func Parse(raw []byte, messageType string) (proto.Message, error) {
+	desc, err := protoregistry.GlobalFiles.FindDescriptorByName(protoreflect.FullName(messageType))
+	if err != nil {
+		return nil, fmt.Errorf("cannot find descriptor for %q: %w", messageType, err)
+	}
+	msgDesc, ok := desc.(protoreflect.MessageDescriptor)
+	if !ok {
+		return nil, fmt.Errorf("%s is not a message", messageType)
+	}
+	msg := dynamicpb.NewMessage(msgDesc)
+	if err := proto.Unmarshal(raw, msg); err != nil {
+		return nil, fmt.Errorf("cannot dynamicaly unmarshal raw message: %w", err)
+	}
+	return msg, nil
 }
 
 func usage() {
