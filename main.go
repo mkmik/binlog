@@ -49,6 +49,8 @@ type StatsCmd struct {
 
 type ViewCmd struct {
 	CmdCommon
+
+	Expand bool `optional:"" help:"Show message bodies"`
 }
 
 func (c *CLI) AfterApply() error {
@@ -180,21 +182,23 @@ func (cmd *ViewCmd) Run(cli *Context) error {
 
 	for _, c := range conversations {
 		fmt.Printf("%s %s:\n", c.Timestamp(), c.MethodName())
-		req, err := c.FormatRequest(cli)
-		if err != nil {
-			fmt.Printf("cannot format request: %v\n", err)
-		} else {
-			fmt.Printf("-> %s\n", req)
-		}
 
-		res, err := c.FormatResponse(cli)
-		if err != nil {
-			fmt.Printf("cannot format response: %v\n", err)
-		} else {
-			fmt.Printf("<- %s\n", res)
-		}
+		if cmd.Expand {
+			req, err := c.FormatRequest(cli)
+			if err != nil {
+				fmt.Printf("cannot format request: %v\n", err)
+			} else {
+				fmt.Printf("-> %s\n", req)
+			}
 
-		fmt.Println()
+			res, err := c.FormatResponse(cli)
+			if err != nil {
+				fmt.Printf("cannot format response: %v\n", err)
+			} else {
+				fmt.Printf("<- %s\n", res)
+			}
+			fmt.Println()
+		}
 	}
 
 	return nil
