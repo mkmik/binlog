@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"text/tabwriter"
 
 	"github.com/alecthomas/kong"
 	"github.com/jhump/protoreflect/desc"
@@ -180,26 +181,29 @@ func (cmd *ViewCmd) Run(cli *Context) error {
 		return err
 	}
 
+	var w tabwriter.Writer
+	w.Init(os.Stdout, 0, 8, 0, '\t', 0)
 	for _, c := range conversations {
-		fmt.Printf("%s %s %s:\n", c.Timestamp(), c.Elapsed(), c.MethodName())
+		fmt.Fprintf(&w, "%s\t%s\t%s\n", c.Timestamp(), c.Elapsed(), c.MethodName())
 
 		if cmd.Expand {
 			req, err := c.FormatRequest(cli)
 			if err != nil {
-				fmt.Printf("cannot format request: %v\n", err)
+				fmt.Fprintf(&w, "->\t\t%v\n", err)
 			} else {
-				fmt.Printf("-> %s\n", req)
+				fmt.Fprintf(&w, "->\t\t%s\n", req)
 			}
 
 			res, err := c.FormatResponse(cli)
 			if err != nil {
-				fmt.Printf("cannot format response: %v\n", err)
+				fmt.Fprintf(&w, "<-\t\t%v\n", err)
 			} else {
-				fmt.Printf("<- %s\n", res)
+				fmt.Fprintf(&w, "<-\t\t%s\n", res)
 			}
-			fmt.Println()
+			fmt.Fprintln(&w)
 		}
 	}
+	w.Flush()
 
 	return nil
 }
