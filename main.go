@@ -3,16 +3,15 @@ package main
 import (
 	"encoding/binary"
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"log"
 	"os"
 	"strings"
 
+	"github.com/alecthomas/kong"
 	"github.com/jhump/protoreflect/desc"
 	"github.com/jhump/protoreflect/desc/protoparse"
-	"github.com/mkmik/stringlist"
 	v1 "google.golang.org/grpc/binarylog/grpc_binarylog_v1"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
@@ -22,13 +21,54 @@ import (
 	"google.golang.org/protobuf/types/dynamicpb"
 )
 
-var (
-	protoFileName = flag.String("proto", "", "Proto schema files")
-	importPaths   = stringlist.Flag("I", "Proto include path")
-)
+type Context struct {
+	*CLI
+}
 
-func init() {
-	flag.Usage = usage
+type CLI struct {
+	ProtoFileNames []string `optional:"" name:"proto" short:"p" help:"Proto files" type:"path"`
+	ImportPaths    []string `optional:"" name:"proto_path" short:"I" help:"Import paths" type:"path"`
+
+	Stats StatsCmd `cmd:"" help:"Stats"`
+	View  ViewCmd  `cmd:"" help:"View logs"`
+}
+
+type CmdCommon struct {
+	LogInputFile string `arg:"" name:"log_input_file" help:"Binary log input file"`
+}
+
+type StatsCmd struct {
+	CmdCommon
+}
+
+type ViewCmd struct {
+	CmdCommon
+}
+
+func (c *CLI) AfterApply() error {
+	p := &protoparse.Parser{
+		ImportPaths: c.ImportPaths,
+	}
+	fds, err := p.ParseFiles(c.ProtoFileNames...)
+	if err != nil {
+		return err
+	}
+	if err := registerFileDescriptors(fds); err != nil {
+		return err
+	}
+	return nil
+}
+
+func registerFileDescriptors(fds []*desc.FileDescriptor) error {
+	for _, fd := range fds {
+		fdp := fd.AsFileDescriptorProto()
+		fdr, err := protodesc.NewFile(fdp, nil)
+		if err != nil {
+			return err
+		}
+		protoregistry.GlobalFiles.RegisterFile(fdr)
+	}
+	return nil
 }
 
 func readEntries(r io.Reader) ([]v1.GrpcLogEntry, error) {
@@ -61,31 +101,8 @@ func readEntries(r io.Reader) ([]v1.GrpcLogEntry, error) {
 	return res, nil
 }
 
-func registerFileDescriptors(fds []*desc.FileDescriptor) error {
-	for _, fd := range fds {
-		fdp := fd.AsFileDescriptorProto()
-		fdr, err := protodesc.NewFile(fdp, nil)
-		if err != nil {
-			return err
-		}
-		protoregistry.GlobalFiles.RegisterFile(fdr)
-	}
-	return nil
-}
-
-func mainE(filename string, protoFileName string, importPaths []string) error {
-	p := &protoparse.Parser{
-		ImportPaths: importPaths,
-	}
-	fds, err := p.ParseFiles(protoFileName)
-	if err != nil {
-		return err
-	}
-	if err := registerFileDescriptors(fds); err != nil {
-		return err
-	}
-
-	f, err := os.Open(filename)
+func (cmd *ViewCmd) Run(cli *Context) error {
+	f, err := os.Open(cmd.LogInputFile)
 	if err != nil {
 		return err
 	}
@@ -234,23 +251,9 @@ func Parse(raw []byte, messageType string) (proto.Message, error) {
 	return msg, nil
 }
 
-func usage() {
-	fmt.Fprintf(os.Stderr, "Usage: %s <filename>\n", os.Args[0])
-	flag.PrintDefaults()
-	os.Exit(1)
-}
-
 func main() {
-	flag.Parse()
-
-	if flag.NArg() < 1 {
-		usage()
-	}
-	if *protoFileName == "" {
-		usage()
-	}
-
-	if err := mainE(flag.Arg(0), *protoFileName, *importPaths); err != nil {
-		log.Fatal(err)
-	}
+	var cli CLI
+	ctx := kong.Parse(&cli)
+	err := ctx.Run(&Context{CLI: &cli})
+	ctx.FatalIfErrorf(err)
 }
