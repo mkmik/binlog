@@ -7,7 +7,6 @@ import (
 	"io"
 	"log"
 	"os"
-	"strings"
 
 	"github.com/alecthomas/kong"
 	"github.com/jhump/protoreflect/desc"
@@ -31,6 +30,13 @@ type CLI struct {
 
 	Stats StatsCmd `cmd:"" help:"Stats"`
 	View  ViewCmd  `cmd:"" help:"View logs"`
+
+	methods map[string]methodTypes
+}
+
+type methodTypes struct {
+	requestMessageType  protoreflect.FullName
+	responseMessageType protoreflect.FullName
 }
 
 type CmdCommon struct {
@@ -56,6 +62,9 @@ func (c *CLI) AfterApply() error {
 	if err := registerFileDescriptors(fds); err != nil {
 		return err
 	}
+	if err := c.registerServices(); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -68,6 +77,27 @@ func registerFileDescriptors(fds []*desc.FileDescriptor) error {
 		}
 		protoregistry.GlobalFiles.RegisterFile(fdr)
 	}
+	return nil
+}
+
+func (c *CLI) registerServices() error {
+	c.methods = map[string]methodTypes{}
+	protoregistry.GlobalFiles.RangeFiles(func(fd protoreflect.FileDescriptor) bool {
+		services := fd.Services()
+		for i := 0; i < services.Len(); i++ {
+			service := services.Get(i)
+			methods := service.Methods()
+			for j := 0; j < methods.Len(); j++ {
+				method := methods.Get(i)
+				name := fmt.Sprintf("/%s/%s", service.FullName(), method.Name())
+				c.methods[name] = methodTypes{
+					requestMessageType:  method.Input().FullName(),
+					responseMessageType: method.Output().FullName(),
+				}
+			}
+		}
+		return true
+	})
 	return nil
 }
 
@@ -109,7 +139,6 @@ func (cmd *ViewCmd) Run(cli *Context) error {
 	defer f.Close()
 
 	entries, err := readEntries(f)
-	log.Printf("Got %d entries", len(entries))
 	if err != nil {
 		return err
 	}
@@ -137,14 +166,14 @@ func (cmd *ViewCmd) Run(cli *Context) error {
 	for _, i := range calls {
 		c := byCall[i]
 		fmt.Printf("%s %s:\n", c.Timestamp(), c.MethodName())
-		req, err := c.FormatRequest()
+		req, err := c.FormatRequest(cli)
 		if err != nil {
 			fmt.Printf("cannot format request: %v\n", err)
 		} else {
 			fmt.Printf("-> %s\n", req)
 		}
 
-		res, err := c.FormatResponse()
+		res, err := c.FormatResponse(cli)
 		if err != nil {
 			fmt.Printf("cannot format response: %v\n", err)
 		} else {
@@ -179,47 +208,36 @@ func (c conversation) RawResponse() []byte {
 	return c.responseMessage.GetMessage().GetData()
 }
 
-func (c conversation) FormatRequest() ([]byte, error) {
-	msgType, err := c.RequestMessageType()
+func (c conversation) FormatRequest(ctx *Context) ([]byte, error) {
+	msgType, err := c.RequestMessageType(ctx)
 	if err != nil {
 		return nil, err
 	}
 	return Format(c.RawRequest(), msgType)
 }
 
-func (c conversation) FormatResponse() ([]byte, error) {
-	msgType, err := c.ResponseMessageType()
+func (c conversation) FormatResponse(ctx *Context) ([]byte, error) {
+	msgType, err := c.ResponseMessageType(ctx)
 	if err != nil {
 		return nil, err
 	}
 	return Format(c.RawResponse(), msgType)
 }
 
-func (c conversation) RequestMessageType() (string, error) {
-	if false {
-		md, err := methodDescriptor(c.MethodName())
-		if err != nil {
-			return "", fmt.Errorf("cannot find method descriptor for %q: %w", c.MethodName(), err)
-		}
-		_ = md
+func (c conversation) RequestMessageType(ctx *Context) (string, error) {
+	md, ok := ctx.methods[c.MethodName()]
+	if !ok {
+		return "", fmt.Errorf("cannot find method descriptor for %q", c.MethodName())
 	}
-	return "helloworld.HelloRequest", nil
+	return string(md.requestMessageType), nil
 }
 
-func (c conversation) ResponseMessageType() (string, error) {
-	return "helloworld.HelloReply", nil
-}
-
-func methodDescriptor(methodName string) (protoreflect.MethodDescriptor, error) {
-	c := strings.SplitN(methodName, "/", 3)
-	service, method := c[1], c[2]
-
-	protoregistry.GlobalFiles.RangeFiles(func(fd protoreflect.FileDescriptor) bool {
-		log.Printf("FILE DESCRIPTOR SERVICES: %#v", fd.Services())
-		return true
-	})
-
-	return nil, fmt.Errorf("TODO %q, %q", service, method)
+func (c conversation) ResponseMessageType(ctx *Context) (string, error) {
+	md, ok := ctx.methods[c.MethodName()]
+	if !ok {
+		return "", fmt.Errorf("cannot find method descriptor for %q", c.MethodName())
+	}
+	return string(md.responseMessageType), nil
 }
 
 func Format(raw []byte, messageType string) ([]byte, error) {
