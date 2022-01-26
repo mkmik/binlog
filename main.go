@@ -200,20 +200,12 @@ func (c conversation) Timestamp() string {
 	return protojson.Format(c.requestMessage.Timestamp)
 }
 
-func (c conversation) RawRequest() []byte {
-	return c.requestMessage.GetMessage().GetData()
-}
-
-func (c conversation) RawResponse() []byte {
-	return c.responseMessage.GetMessage().GetData()
-}
-
 func (c conversation) FormatRequest(ctx *Context) ([]byte, error) {
 	msgType, err := c.RequestMessageType(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return Format(c.RawRequest(), msgType)
+	return Format(&c.requestMessage, msgType)
 }
 
 func (c conversation) FormatResponse(ctx *Context) ([]byte, error) {
@@ -221,7 +213,7 @@ func (c conversation) FormatResponse(ctx *Context) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	return Format(c.RawResponse(), msgType)
+	return Format(&c.responseMessage, msgType)
 }
 
 func (c conversation) RequestMessageType(ctx *Context) (string, error) {
@@ -240,7 +232,8 @@ func (c conversation) ResponseMessageType(ctx *Context) (string, error) {
 	return string(md.responseMessageType), nil
 }
 
-func Format(raw []byte, messageType string) ([]byte, error) {
+func Format(entry *v1.GrpcLogEntry, messageType string) ([]byte, error) {
+	raw := entry.GetMessage().GetData()
 	msg, err := Parse(raw, messageType)
 	if err != nil {
 		return nil, err
@@ -249,6 +242,9 @@ func Format(raw []byte, messageType string) ([]byte, error) {
 	res, err := protojson.Marshal(msg)
 	if err != nil {
 		return nil, fmt.Errorf("cannot marshal dynamic proto: %w", err)
+	}
+	if entry.PayloadTruncated {
+		res = append(res, []byte("...")...)
 	}
 	return res, nil
 }
