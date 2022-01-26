@@ -131,16 +131,10 @@ func readEntries(r io.Reader) ([]v1.GrpcLogEntry, error) {
 	return res, nil
 }
 
-func (cmd *ViewCmd) Run(cli *Context) error {
-	f, err := os.Open(cmd.LogInputFile)
+func readConversations(cli *Context, r io.Reader) ([]conversation, error) {
+	entries, err := readEntries(r)
 	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	entries, err := readEntries(f)
-	if err != nil {
-		return err
+		return nil, err
 	}
 
 	var calls []uint64
@@ -163,8 +157,28 @@ func (cmd *ViewCmd) Run(cli *Context) error {
 		byCall[e.CallId] = conv
 	}
 
+	var res []conversation
 	for _, i := range calls {
 		c := byCall[i]
+		res = append(res, c)
+	}
+
+	return res, nil
+}
+
+func (cmd *ViewCmd) Run(cli *Context) error {
+	f, err := os.Open(cmd.LogInputFile)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	conversations, err := readConversations(cli, f)
+	if err != nil {
+		return err
+	}
+
+	for _, c := range conversations {
 		fmt.Printf("%s %s:\n", c.Timestamp(), c.MethodName())
 		req, err := c.FormatRequest(cli)
 		if err != nil {
@@ -205,7 +219,7 @@ func (c conversation) FormatRequest(ctx *Context) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	return Format(&c.requestMessage, msgType)
+	return formatEntry(&c.requestMessage, msgType)
 }
 
 func (c conversation) FormatResponse(ctx *Context) ([]byte, error) {
@@ -213,7 +227,7 @@ func (c conversation) FormatResponse(ctx *Context) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	return Format(&c.responseMessage, msgType)
+	return formatEntry(&c.responseMessage, msgType)
 }
 
 func (c conversation) RequestMessageType(ctx *Context) (string, error) {
@@ -232,9 +246,9 @@ func (c conversation) ResponseMessageType(ctx *Context) (string, error) {
 	return string(md.responseMessageType), nil
 }
 
-func Format(entry *v1.GrpcLogEntry, messageType string) ([]byte, error) {
+func formatEntry(entry *v1.GrpcLogEntry, messageType string) ([]byte, error) {
 	raw := entry.GetMessage().GetData()
-	msg, err := Parse(raw, messageType)
+	msg, err := parseBody(raw, messageType)
 	if err != nil {
 		return nil, err
 	}
@@ -249,7 +263,7 @@ func Format(entry *v1.GrpcLogEntry, messageType string) ([]byte, error) {
 	return res, nil
 }
 
-func Parse(raw []byte, messageType string) (proto.Message, error) {
+func parseBody(raw []byte, messageType string) (proto.Message, error) {
 	desc, err := protoregistry.GlobalFiles.FindDescriptorByName(protoreflect.FullName(messageType))
 	if err != nil {
 		return nil, fmt.Errorf("cannot find descriptor for %q: %w", messageType, err)
