@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"strings"
 
 	"github.com/jhump/protoreflect/desc"
 	"github.com/jhump/protoreflect/desc/protoparse"
@@ -121,14 +122,14 @@ func mainE(filename string, protoFileName string, importPaths []string) error {
 		fmt.Printf("%s %s:\n", c.Timestamp(), c.MethodName())
 		req, err := c.FormatRequest()
 		if err != nil {
-			fmt.Printf("cannot marshal request: %v\n", err)
+			fmt.Printf("cannot format request: %v\n", err)
 		} else {
 			fmt.Printf("-> %s\n", req)
 		}
 
 		res, err := c.FormatResponse()
 		if err != nil {
-			fmt.Printf("cannot marshal response: %v\n", err)
+			fmt.Printf("cannot format response: %v\n", err)
 		} else {
 			fmt.Printf("<- %s\n", res)
 		}
@@ -178,11 +179,30 @@ func (c conversation) FormatResponse() ([]byte, error) {
 }
 
 func (c conversation) RequestMessageType() (string, error) {
+	if false {
+		md, err := methodDescriptor(c.MethodName())
+		if err != nil {
+			return "", fmt.Errorf("cannot find method descriptor for %q: %w", c.MethodName(), err)
+		}
+		_ = md
+	}
 	return "helloworld.HelloRequest", nil
 }
 
 func (c conversation) ResponseMessageType() (string, error) {
 	return "helloworld.HelloReply", nil
+}
+
+func methodDescriptor(methodName string) (protoreflect.MethodDescriptor, error) {
+	c := strings.SplitN(methodName, "/", 3)
+	service, method := c[1], c[2]
+
+	protoregistry.GlobalFiles.RangeFiles(func(fd protoreflect.FileDescriptor) bool {
+		log.Printf("FILE DESCRIPTOR SERVICES: %#v", fd.Services())
+		return true
+	})
+
+	return nil, fmt.Errorf("TODO %q, %q", service, method)
 }
 
 func Format(raw []byte, messageType string) ([]byte, error) {
