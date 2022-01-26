@@ -183,6 +183,7 @@ func (cmd *ViewCmd) Run(cli *Context) error {
 
 	var w tabwriter.Writer
 	w.Init(os.Stdout, 0, 8, 0, '\t', 0)
+	fmt.Fprintf(&w, "When\tElapsed\tMethod\n")
 	for _, c := range conversations {
 		fmt.Fprintf(&w, "%s\t%s\t%s\n", c.Timestamp(), c.Elapsed(), c.MethodName())
 
@@ -219,7 +220,8 @@ func (c conversation) MethodName() string {
 }
 
 func (c conversation) Timestamp() string {
-	return protojson.Format(c.requestMessage.Timestamp)
+	// use same format as /debug/requests (https://cs.opensource.google/go/x/net/+/e204ce36:trace/trace.go;l=888)
+	return c.requestMessage.Timestamp.AsTime().Format("2006/01/02 15:04:05.000000")
 }
 
 func (c conversation) Elapsed() string {
