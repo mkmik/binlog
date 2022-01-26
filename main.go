@@ -181,7 +181,7 @@ func (cmd *ViewCmd) Run(cli *Context) error {
 	}
 
 	for _, c := range conversations {
-		fmt.Printf("%s %s:\n", c.Timestamp(), c.MethodName())
+		fmt.Printf("%s %s %s:\n", c.Timestamp(), c.Elapsed(), c.MethodName())
 
 		if cmd.Expand {
 			req, err := c.FormatRequest(cli)
@@ -216,6 +216,15 @@ func (c conversation) MethodName() string {
 
 func (c conversation) Timestamp() string {
 	return protojson.Format(c.requestMessage.Timestamp)
+}
+
+func (c conversation) Elapsed() string {
+	// If a conversation lacks a response return 0
+	if c.responseMessage.Timestamp == nil {
+		return "(never)"
+	}
+	d := c.responseMessage.Timestamp.AsTime().Sub(c.requestMessage.Timestamp.AsTime())
+	return fmt.Sprint(d)
 }
 
 func (c conversation) FormatRequest(ctx *Context) ([]byte, error) {
