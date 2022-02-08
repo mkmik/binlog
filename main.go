@@ -270,7 +270,7 @@ type conversation struct {
 }
 
 func (c conversation) MethodName() string {
-	return c.requestHeader.GetClientHeader().MethodName
+	return c.requestHeader.GetClientHeader().GetMethodName()
 }
 
 func (c conversation) Timestamp() string {
