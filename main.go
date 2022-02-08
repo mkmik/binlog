@@ -110,7 +110,7 @@ func readEntries(r io.Reader) ([]v1.GrpcLogEntry, error) {
 	for {
 		hdr := make([]byte, 4)
 		if _, err := io.ReadFull(r, hdr); err != nil {
-			if errors.Is(err, io.ErrUnexpectedEOF) {
+			if errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, io.EOF) {
 				break
 			}
 			return nil, fmt.Errorf("error reading count: %w", err)
@@ -120,7 +120,7 @@ func readEntries(r io.Reader) ([]v1.GrpcLogEntry, error) {
 
 		body := make([]byte, size)
 		if _, err := io.ReadFull(r, body); err != nil {
-			if errors.Is(err, io.ErrUnexpectedEOF) {
+			if errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, io.EOF) {
 				log.Printf("last entry truncated, ignoring")
 				return res, nil
 			}
