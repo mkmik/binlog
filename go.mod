@@ -4,7 +4,7 @@ go 1.17
 
 require (
 	github.com/alecthomas/kong v0.4.0
-	github.com/jhump/protoreflect v1.10.1
+	github.com/jhump/protoreflect v1.10.3
 	google.golang.org/grpc v1.44.0
 	google.golang.org/protobuf v1.27.1
 )
