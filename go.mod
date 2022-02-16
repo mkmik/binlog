@@ -3,7 +3,7 @@ module github.com/mkmik/binlog
 go 1.17
 
 require (
-	github.com/alecthomas/kong v0.4.0
+	github.com/alecthomas/kong v0.4.1
 	github.com/jhump/protoreflect v1.11.0
 	google.golang.org/grpc v1.44.0
 	google.golang.org/protobuf v1.27.1
