@@ -76,11 +76,9 @@ func (c *CLI) AfterApply() error {
 	if err := registerFileDescriptors(fds); err != nil {
 		return fmt.Errorf("registerFileDescriptors: %w", err)
 	}
-
 	if err := registerFileDescriptorSets(c.DescSet); err != nil {
 		return fmt.Errorf("registerFileDescriptorSets: %w", err)
 	}
-
 	if err := c.registerServices(); err != nil {
 		return fmt.Errorf("registerServices: %w", err)
 	}
@@ -101,13 +99,8 @@ func registerFileDescriptorSets(filenames []string) error {
 			return err
 		}
 		for _, fdp := range fdset.File {
-			fdr, err := protodesc.NewFile(fdp, protoregistry.GlobalFiles)
-			if err != nil {
-				return fmt.Errorf("newfile; fdset %s, file %s: %w", descSetFileName, fdp.GetName(), err)
-			}
-
-			if err := protoregistry.GlobalFiles.RegisterFile(fdr); err != nil {
-				return fmt.Errorf("RegisterFile; fdset %s, file %s: %w", descSetFileName, fdp.GetName(), err)
+			if err := registerFileDescriptor(fdp); err != nil {
+				return fmt.Errorf("fdset %s, file %s: %w", descSetFileName, fdp.GetName(), err)
 			}
 		}
 	}
@@ -116,14 +109,24 @@ func registerFileDescriptorSets(filenames []string) error {
 
 func registerFileDescriptors(fds []*desc.FileDescriptor) error {
 	for _, fd := range fds {
-		fdp := fd.AsFileDescriptorProto()
-		fdr, err := protodesc.NewFile(fdp, protoregistry.GlobalFiles)
-		if err != nil {
+		if err := registerFileDescriptor(fd.AsFileDescriptorProto()); err != nil {
 			return err
 		}
-		if err := protoregistry.GlobalFiles.RegisterFile(fdr); err != nil {
-			return err
-		}
+	}
+	return nil
+}
+
+func registerFileDescriptor(fdp *descriptorpb.FileDescriptorProto) error {
+	fdr, err := protodesc.NewFile(fdp, protoregistry.GlobalFiles)
+	if err != nil {
+		return err
+	}
+	if err := protoregistry.GlobalFiles.RegisterFile(fdr); err != nil {
+		return err
+	}
+	for i := 0; i < fdr.Messages().Len(); i++ {
+		mt := dynamicpb.NewMessageType(fdr.Messages().Get(i))
+		protoregistry.GlobalTypes.RegisterMessage(mt)
 	}
 	return nil
 }
