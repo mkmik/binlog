@@ -161,11 +161,11 @@ func readConversations(cli *Context, r io.Reader) ([]conversation, error) {
 		case v1.GrpcLogEntry_EVENT_TYPE_CLIENT_HEADER:
 			conv.requestHeader = e
 		case v1.GrpcLogEntry_EVENT_TYPE_CLIENT_MESSAGE:
-			conv.requestMessage = e
+			conv.requestMessages = append(conv.requestMessages, e)
 		case v1.GrpcLogEntry_EVENT_TYPE_SERVER_HEADER:
 			conv.responseHeader = e
 		case v1.GrpcLogEntry_EVENT_TYPE_SERVER_MESSAGE:
-			conv.responseMessage = e
+			conv.responseMessages = append(conv.responseMessages, e)
 		case v1.GrpcLogEntry_EVENT_TYPE_SERVER_TRAILER:
 			conv.responseTrailer = e
 		}
@@ -217,18 +217,11 @@ func (cmd *ViewCmd) Run(cli *Context) error {
 		}
 
 		if cmd.Expand {
-			req, err := c.FormatRequest(cli)
-			if err != nil {
+			if err := c.FormatRequest(&w, cli); err != nil {
 				fmt.Fprintf(&w, "->\t%v\n", err)
-			} else {
-				fmt.Fprintf(&w, "->\t%s\n", req)
 			}
-
-			res, err := c.FormatResponse(cli)
-			if err != nil {
+			if err := c.FormatResponse(&w, cli); err != nil {
 				fmt.Fprintf(&w, "<-\t%v\n", err)
-			} else {
-				fmt.Fprintf(&w, "<-\t%s\n", res)
 			}
 			fmt.Fprintln(&w)
 		}
@@ -327,11 +320,11 @@ func renderMetadata(m *v1.Metadata) string {
 }
 
 type conversation struct {
-	requestHeader   v1.GrpcLogEntry
-	requestMessage  v1.GrpcLogEntry
-	responseHeader  v1.GrpcLogEntry
-	responseMessage v1.GrpcLogEntry
-	responseTrailer v1.GrpcLogEntry
+	requestHeader    v1.GrpcLogEntry
+	requestMessages  []v1.GrpcLogEntry
+	responseHeader   v1.GrpcLogEntry
+	responseMessages []v1.GrpcLogEntry
+	responseTrailer  v1.GrpcLogEntry
 }
 
 func (c conversation) CallId() uint64 {
@@ -344,7 +337,7 @@ func (c conversation) MethodName() string {
 
 func (c conversation) Timestamp() string {
 	// use same format as /debug/requests (https://cs.opensource.google/go/x/net/+/e204ce36:trace/trace.go;l=888)
-	return c.requestMessage.Timestamp.AsTime().Format("2006/01/02 15:04:05.000000")
+	return c.requestHeader.Timestamp.AsTime().Format("2006/01/02 15:04:05.000000")
 }
 
 func (c conversation) Elapsed() string {
@@ -356,23 +349,36 @@ func (c conversation) Elapsed() string {
 }
 
 func (c conversation) ElapsedDuration() time.Duration {
-	return c.responseTrailer.Timestamp.AsTime().Sub(c.requestMessage.Timestamp.AsTime())
+	return c.responseTrailer.Timestamp.AsTime().Sub(c.requestHeader.Timestamp.AsTime())
 }
 
-func (c conversation) FormatRequest(ctx *Context) ([]byte, error) {
+func formatMessages(w io.Writer, prefix string, entries []v1.GrpcLogEntry, messageType string) error {
+	for _, m := range entries {
+		b, err := formatEntry(&m, messageType)
+		if err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintf(w, "%s\t%v", prefix, b); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (c conversation) FormatRequest(w io.Writer, ctx *Context) error {
 	msgType, err := c.RequestMessageType(ctx)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	return formatEntry(&c.requestMessage, msgType)
+	return formatMessages(w, "->", c.requestMessages, msgType)
 }
 
-func (c conversation) FormatResponse(ctx *Context) ([]byte, error) {
+func (c conversation) FormatResponse(w io.Writer, ctx *Context) error {
 	msgType, err := c.ResponseMessageType(ctx)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	return formatEntry(&c.responseMessage, msgType)
+	return formatMessages(w, "->", c.responseMessages, msgType)
 }
 
 func (c conversation) RequestMessageType(ctx *Context) (string, error) {
