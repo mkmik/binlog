@@ -32,6 +32,7 @@ type CLI struct {
 
 	Stats StatsCmd `cmd:"" help:"Stats"`
 	View  ViewCmd  `cmd:"" help:"View logs"`
+	Debug DebugCmd `cmd:"" help:"debug"`
 
 	methods map[string]methodTypes
 }
@@ -53,6 +54,10 @@ type ViewCmd struct {
 	CmdCommon
 
 	Expand bool `optional:"" help:"Show message bodies"`
+}
+
+type DebugCmd struct {
+	CmdCommon
 }
 
 func (c *CLI) AfterApply() error {
@@ -87,6 +92,7 @@ func registerFileDescriptors(fds []*desc.FileDescriptor) error {
 func (c *CLI) registerServices() error {
 	c.methods = map[string]methodTypes{}
 	protoregistry.GlobalFiles.RangeFiles(func(fd protoreflect.FileDescriptor) bool {
+		//		log.Printf("Registering services for file %s", fd.FullName())
 		services := fd.Services()
 		for i := 0; i < services.Len(); i++ {
 			service := services.Get(i)
@@ -154,8 +160,12 @@ func readConversations(cli *Context, r io.Reader) ([]conversation, error) {
 			conv.requestHeader = e
 		case v1.GrpcLogEntry_EVENT_TYPE_CLIENT_MESSAGE:
 			conv.requestMessage = e
+		case v1.GrpcLogEntry_EVENT_TYPE_SERVER_HEADER:
+			conv.responseHeader = e
 		case v1.GrpcLogEntry_EVENT_TYPE_SERVER_MESSAGE:
 			conv.responseMessage = e
+		case v1.GrpcLogEntry_EVENT_TYPE_SERVER_TRAILER:
+			conv.responseTrailer = e
 		}
 
 		byCall[e.CallId] = conv
@@ -184,9 +194,9 @@ func (cmd *ViewCmd) Run(cli *Context) error {
 
 	var w tabwriter.Writer
 	w.Init(os.Stdout, 0, 8, 0, '\t', 0)
-	fmt.Fprintf(&w, "When\tElapsed\tMethod\n")
+	fmt.Fprintf(&w, "ID\tWhen\tElapsed\tMethod\n")
 	for _, c := range conversations {
-		fmt.Fprintf(&w, "%s\t%s\t%s\n", c.Timestamp(), c.Elapsed(), c.MethodName())
+		fmt.Fprintf(&w, "%d\t%s\t%s\t%s\n", c.CallId(), c.Timestamp(), c.Elapsed(), c.MethodName())
 
 		if cmd.Expand {
 			req, err := c.FormatRequest(cli)
@@ -211,6 +221,8 @@ func (cmd *ViewCmd) Run(cli *Context) error {
 }
 
 func (cmd *StatsCmd) Run(cli *Context) error {
+	//	protoregistry.GlobalFiles.RegisterFile(storageproto.File_storage_common_proto)
+
 	f, err := os.Open(cmd.LogInputFile)
 	if err != nil {
 		return err
@@ -263,10 +275,38 @@ func (cmd *StatsCmd) Run(cli *Context) error {
 	return nil
 }
 
+func (cmd *DebugCmd) Run(cli *Context) error {
+	f, err := os.Open(cmd.LogInputFile)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	entries, err := readEntries(f)
+	if err != nil {
+		return err
+	}
+
+	var w tabwriter.Writer
+	w.Init(os.Stdout, 0, 8, 0, '\t', 0)
+
+	for _, e := range entries {
+		fmt.Fprintf(&w, "%d\t%s\t%s\n", e.CallId, e.GetType(), e.GetClientHeader().GetMethodName())
+	}
+	w.Flush()
+	return nil
+}
+
 type conversation struct {
 	requestHeader   v1.GrpcLogEntry
 	requestMessage  v1.GrpcLogEntry
+	responseHeader  v1.GrpcLogEntry
 	responseMessage v1.GrpcLogEntry
+	responseTrailer v1.GrpcLogEntry
+}
+
+func (c conversation) CallId() uint64 {
+	return c.requestHeader.CallId
 }
 
 func (c conversation) MethodName() string {
@@ -280,14 +320,14 @@ func (c conversation) Timestamp() string {
 
 func (c conversation) Elapsed() string {
 	// If a conversation lacks a response return 0
-	if c.responseMessage.Timestamp == nil {
+	if c.responseTrailer.Timestamp == nil {
 		return "(never)"
 	}
 	return fmt.Sprint(c.ElapsedDuration())
 }
 
 func (c conversation) ElapsedDuration() time.Duration {
-	return c.responseMessage.Timestamp.AsTime().Sub(c.requestMessage.Timestamp.AsTime())
+	return c.responseTrailer.Timestamp.AsTime().Sub(c.requestMessage.Timestamp.AsTime())
 }
 
 func (c conversation) FormatRequest(ctx *Context) ([]byte, error) {
