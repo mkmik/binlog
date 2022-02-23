@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"strings"
 	"text/tabwriter"
 	"time"
 
@@ -53,7 +54,8 @@ type StatsCmd struct {
 type ViewCmd struct {
 	CmdCommon
 
-	Expand bool `optional:"" help:"Show message bodies"`
+	Expand  bool `optional:"" help:"Show message bodies"`
+	Headers bool `optional:"" help:"Show headers"`
 }
 
 type DebugCmd struct {
@@ -202,19 +204,31 @@ func (cmd *ViewCmd) Run(cli *Context) error {
 		}
 		fmt.Fprintf(&w, "%d\t%s\t%s\t%s\n", c.CallId(), c.Timestamp(), c.Elapsed(), c.MethodName())
 
+		if cmd.Headers {
+			if m := c.requestHeader.GetClientHeader().GetMetadata(); len(m.GetEntry()) > 0 {
+				fmt.Fprintf(&w, "->{h}\t%s\n", renderMetadata(m))
+			}
+			if m := c.responseHeader.GetServerHeader().GetMetadata(); len(m.GetEntry()) > 0 {
+				fmt.Fprintf(&w, "<-{h}\t%s\n", renderMetadata(m))
+			}
+			if m := c.responseTrailer.GetTrailer().GetMetadata(); len(m.GetEntry()) > 0 {
+				fmt.Fprintf(&w, "<-{t}\t%s\n", renderMetadata(m))
+			}
+		}
+
 		if cmd.Expand {
 			req, err := c.FormatRequest(cli)
 			if err != nil {
-				fmt.Fprintf(&w, "->\t\t%v\n", err)
+				fmt.Fprintf(&w, "->\t%v\n", err)
 			} else {
-				fmt.Fprintf(&w, "->\t\t%s\n", req)
+				fmt.Fprintf(&w, "->\t%s\n", req)
 			}
 
 			res, err := c.FormatResponse(cli)
 			if err != nil {
-				fmt.Fprintf(&w, "<-\t\t%v\n", err)
+				fmt.Fprintf(&w, "<-\t%v\n", err)
 			} else {
-				fmt.Fprintf(&w, "<-\t\t%s\n", res)
+				fmt.Fprintf(&w, "<-\t%s\n", res)
 			}
 			fmt.Fprintln(&w)
 		}
@@ -299,6 +313,17 @@ func (cmd *DebugCmd) Run(cli *Context) error {
 	}
 	w.Flush()
 	return nil
+}
+
+func renderMetadata(m *v1.Metadata) string {
+	var w strings.Builder
+	for i, e := range m.GetEntry() {
+		fmt.Fprintf(&w, "%q:%q", e.Key, e.Value)
+		if i+1 < len(m.GetEntry()) {
+			fmt.Fprintf(&w, ", ")
+		}
+	}
+	return w.String()
 }
 
 type conversation struct {
