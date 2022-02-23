@@ -94,13 +94,12 @@ func registerFileDescriptors(fds []*desc.FileDescriptor) error {
 func (c *CLI) registerServices() error {
 	c.methods = map[string]methodTypes{}
 	protoregistry.GlobalFiles.RangeFiles(func(fd protoreflect.FileDescriptor) bool {
-		//		log.Printf("Registering services for file %s", fd.FullName())
 		services := fd.Services()
 		for i := 0; i < services.Len(); i++ {
 			service := services.Get(i)
 			methods := service.Methods()
 			for j := 0; j < methods.Len(); j++ {
-				method := methods.Get(i)
+				method := methods.Get(j)
 				name := fmt.Sprintf("/%s/%s", service.FullName(), method.Name())
 				c.methods[name] = methodTypes{
 					requestMessageType:  method.Input().FullName(),
@@ -356,7 +355,7 @@ func formatMessages(w io.Writer, prefix string, entries []v1.GrpcLogEntry, messa
 		if err != nil {
 			return err
 		}
-		if _, err := fmt.Fprintf(w, "%s\t%v", prefix, b); err != nil {
+		if _, err := fmt.Fprintf(w, "%s\t%s", prefix, b); err != nil {
 			return err
 		}
 	}
@@ -402,7 +401,7 @@ func formatEntry(entry *v1.GrpcLogEntry, messageType string) ([]byte, error) {
 		return nil, err
 	}
 
-	res, err := protojson.Marshal(msg)
+	res, err := protojson.MarshalOptions{Multiline: true}.Marshal(msg)
 	if err != nil {
 		return nil, fmt.Errorf("cannot marshal dynamic proto: %w", err)
 	}
