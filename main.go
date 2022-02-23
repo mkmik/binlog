@@ -232,8 +232,6 @@ func (cmd *ViewCmd) Run(cli *Context) error {
 }
 
 func (cmd *StatsCmd) Run(cli *Context) error {
-	//	protoregistry.GlobalFiles.RegisterFile(storageproto.File_storage_common_proto)
-
 	f, err := os.Open(cmd.LogInputFile)
 	if err != nil {
 		return err
