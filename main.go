@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"os"
 	"strings"
@@ -20,6 +21,7 @@ import (
 	"google.golang.org/protobuf/reflect/protodesc"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
+	"google.golang.org/protobuf/types/descriptorpb"
 	"google.golang.org/protobuf/types/dynamicpb"
 )
 
@@ -28,8 +30,9 @@ type Context struct {
 }
 
 type CLI struct {
-	ProtoFileNames []string `optional:"" name:"proto" short:"p" help:"Proto files" type:"path"`
-	ImportPaths    []string `optional:"" name:"proto_path" short:"I" help:"Import paths" type:"path"`
+	ProtoFileNames []string `optional:"" name:"proto" short:"p" help:"Proto files" type:"string"`
+	ImportPaths    []string `optional:"" name:"proto_path" short:"I" help:"Import paths" type:"string"`
+	DescSet        []string `optional:"" name:"descriptor_set" help:"path to FileDescriptorSet, see protoc -o"`
 
 	Stats StatsCmd `cmd:"" help:"Stats"`
 	View  ViewCmd  `cmd:"" help:"View logs"`
@@ -71,10 +74,42 @@ func (c *CLI) AfterApply() error {
 		return err
 	}
 	if err := registerFileDescriptors(fds); err != nil {
-		return err
+		return fmt.Errorf("registerFileDescriptors: %w", err)
 	}
+
+	if err := registerFileDescriptorSets(c.DescSet); err != nil {
+		return fmt.Errorf("registerFileDescriptorSets: %w", err)
+	}
+
 	if err := c.registerServices(); err != nil {
-		return err
+		return fmt.Errorf("registerServices: %w", err)
+	}
+	return nil
+}
+
+func registerFileDescriptorSets(filenames []string) error {
+	for _, descSetFileName := range filenames {
+		b, err := ioutil.ReadFile(descSetFileName)
+		if os.IsNotExist(err) {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		var fdset descriptorpb.FileDescriptorSet
+		if err := proto.Unmarshal(b, &fdset); err != nil {
+			return err
+		}
+		for _, fdp := range fdset.File {
+			fdr, err := protodesc.NewFile(fdp, protoregistry.GlobalFiles)
+			if err != nil {
+				return fmt.Errorf("newfile; fdset %s, file %s: %w", descSetFileName, fdp.GetName(), err)
+			}
+
+			if err := protoregistry.GlobalFiles.RegisterFile(fdr); err != nil {
+				return fmt.Errorf("RegisterFile; fdset %s, file %s: %w", descSetFileName, fdp.GetName(), err)
+			}
+		}
 	}
 	return nil
 }
@@ -82,11 +117,13 @@ func (c *CLI) AfterApply() error {
 func registerFileDescriptors(fds []*desc.FileDescriptor) error {
 	for _, fd := range fds {
 		fdp := fd.AsFileDescriptorProto()
-		fdr, err := protodesc.NewFile(fdp, nil)
+		fdr, err := protodesc.NewFile(fdp, protoregistry.GlobalFiles)
 		if err != nil {
 			return err
 		}
-		protoregistry.GlobalFiles.RegisterFile(fdr)
+		if err := protoregistry.GlobalFiles.RegisterFile(fdr); err != nil {
+			return err
+		}
 	}
 	return nil
 }
