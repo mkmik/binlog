@@ -196,6 +196,10 @@ func (cmd *ViewCmd) Run(cli *Context) error {
 	w.Init(os.Stdout, 0, 8, 0, '\t', 0)
 	fmt.Fprintf(&w, "ID\tWhen\tElapsed\tMethod\n")
 	for _, c := range conversations {
+		// skip conversations that have no client headers
+		if c.CallId() == 0 {
+			continue
+		}
 		fmt.Fprintf(&w, "%d\t%s\t%s\t%s\n", c.CallId(), c.Timestamp(), c.Elapsed(), c.MethodName())
 
 		if cmd.Expand {
