@@ -34,9 +34,10 @@ type CLI struct {
 	ImportPaths    []string `optional:"" name:"proto_path" short:"I" help:"Import paths" type:"string"`
 	DescSet        []string `optional:"" name:"descriptor_set" help:"path to FileDescriptorSet, see protoc -o"`
 
-	Stats StatsCmd `cmd:"" help:"Stats"`
-	View  ViewCmd  `cmd:"" help:"View logs"`
-	Debug DebugCmd `cmd:"" help:"debug"`
+	Stats  StatsCmd  `cmd:"" help:"Stats"`
+	View   ViewCmd   `cmd:"" help:"View logs"`
+	Debug  DebugCmd  `cmd:"" help:"debug"`
+	Filter FilterCmd `cmd:"" help:"Create a smaller binlog out of a binlog file"`
 
 	methods map[string]methodTypes
 }
@@ -63,6 +64,12 @@ type ViewCmd struct {
 
 type DebugCmd struct {
 	CmdCommon
+}
+
+type FilterCmd struct {
+	CmdCommon
+
+	CallID uint64 `optional:""`
 }
 
 func (c *CLI) AfterApply() error {
@@ -342,6 +349,42 @@ func (cmd *DebugCmd) Run(cli *Context) error {
 		fmt.Fprintf(&w, "%d\t%s\t%s\n", e.CallId, e.GetType(), e.GetClientHeader().GetMethodName())
 	}
 	w.Flush()
+	return nil
+}
+
+func (cmd *FilterCmd) Run(cli *Context) error {
+	f, err := os.Open(cmd.LogInputFile)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	entries, err := readEntries(f)
+	if err != nil {
+		return err
+	}
+
+	w := os.Stdout
+	for _, e := range entries {
+		b, err := proto.Marshal(&e)
+		if err != nil {
+			return err
+		}
+		if cmd.CallID != 0 {
+			if e.CallId != cmd.CallID {
+				continue
+			}
+		}
+
+		if err := binary.Write(w, binary.BigEndian, uint32(len(b))); err != nil {
+			return err
+		}
+
+		if _, err := w.Write(b); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
