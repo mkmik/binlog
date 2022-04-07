@@ -177,10 +177,10 @@ func (c *CLI) registerServices() error {
 	return nil
 }
 
-func readEntries(r io.Reader) ([]v1.GrpcLogEntry, error) {
+func readEntries(r io.Reader) ([]*v1.GrpcLogEntry, error) {
 	r = bufio.NewReader(r)
 
-	var res []v1.GrpcLogEntry
+	var res []*v1.GrpcLogEntry
 	for {
 		hdr := make([]byte, 4)
 		if _, err := io.ReadFull(r, hdr); err != nil {
@@ -204,7 +204,7 @@ func readEntries(r io.Reader) ([]v1.GrpcLogEntry, error) {
 		if err := proto.Unmarshal(body, &entry); err != nil {
 			return nil, err
 		}
-		res = append(res, entry)
+		res = append(res, &entry)
 	}
 	return res, nil
 }
@@ -386,7 +386,7 @@ func (cmd *FilterCmd) Run(cli *Context) error {
 
 	w := os.Stdout
 	for _, e := range entries {
-		b, err := proto.Marshal(&e)
+		b, err := proto.Marshal(e)
 		if err != nil {
 			return err
 		}
@@ -420,11 +420,11 @@ func renderMetadata(m *v1.Metadata) string {
 }
 
 type conversation struct {
-	requestHeader    v1.GrpcLogEntry
-	requestMessages  []v1.GrpcLogEntry
-	responseHeader   v1.GrpcLogEntry
-	responseMessages []v1.GrpcLogEntry
-	responseTrailer  v1.GrpcLogEntry
+	requestHeader    *v1.GrpcLogEntry
+	requestMessages  []*v1.GrpcLogEntry
+	responseHeader   *v1.GrpcLogEntry
+	responseMessages []*v1.GrpcLogEntry
+	responseTrailer  *v1.GrpcLogEntry
 }
 
 func (c conversation) CallId() uint64 {
@@ -449,12 +449,12 @@ func (c conversation) Elapsed() string {
 }
 
 func (c conversation) ElapsedDuration() time.Duration {
-	return c.responseTrailer.Timestamp.AsTime().Sub(c.requestHeader.Timestamp.AsTime())
+	return c.responseTrailer.GetTimestamp().AsTime().Sub(c.requestHeader.GetTimestamp().AsTime())
 }
 
-func formatMessages(w io.Writer, prefix string, entries []v1.GrpcLogEntry, messageType string) error {
+func formatMessages(w io.Writer, prefix string, entries []*v1.GrpcLogEntry, messageType string) error {
 	for _, m := range entries {
-		b, err := formatEntry(&m, messageType)
+		b, err := formatEntry(m, messageType)
 		if err != nil {
 			return err
 		}
