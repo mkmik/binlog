@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -8,6 +9,7 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"runtime/pprof"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -33,6 +35,7 @@ type CLI struct {
 	ProtoFileNames []string `optional:"" name:"proto" short:"p" help:"Proto files" type:"string"`
 	ImportPaths    []string `optional:"" name:"proto_path" short:"I" help:"Import paths" type:"string"`
 	DescSet        []string `optional:"" name:"descriptor_set" help:"path to FileDescriptorSet, see protoc -o"`
+	CPUProfile     string   `optional:"" name:"cpuprofile" help:"write cpu profile to file"`
 
 	Stats  StatsCmd  `cmd:"" help:"Stats"`
 	View   ViewCmd   `cmd:"" help:"View logs"`
@@ -89,7 +92,22 @@ func (c *CLI) AfterApply() error {
 	if err := c.registerServices(); err != nil {
 		return fmt.Errorf("registerServices: %w", err)
 	}
+	if c.CPUProfile != "" {
+		c.startCPUProfile()
+	}
 	return nil
+}
+
+func (c *CLI) startCPUProfile() {
+	f, err := os.Create(c.CPUProfile)
+	if err != nil {
+		log.Fatal(err)
+	}
+	pprof.StartCPUProfile(f)
+}
+
+func (c *CLI) OnExit() {
+	pprof.StopCPUProfile()
 }
 
 func registerFileDescriptorSets(filenames []string) error {
@@ -160,6 +178,8 @@ func (c *CLI) registerServices() error {
 }
 
 func readEntries(r io.Reader) ([]v1.GrpcLogEntry, error) {
+	r = bufio.NewReader(r)
+
 	var res []v1.GrpcLogEntry
 	for {
 		hdr := make([]byte, 4)
@@ -515,4 +535,5 @@ func main() {
 	ctx := kong.Parse(&cli)
 	err := ctx.Run(&Context{CLI: &cli})
 	ctx.FatalIfErrorf(err)
+	cli.OnExit()
 }
