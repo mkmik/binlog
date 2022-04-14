@@ -442,7 +442,7 @@ func (c conversation) Timestamp() string {
 
 func (c conversation) Elapsed() string {
 	// If a conversation lacks a response return 0
-	if c.responseTrailer.Timestamp == nil {
+	if c.responseTrailer.GetTimestamp() == nil {
 		return "(never)"
 	}
 	return fmt.Sprint(c.ElapsedDuration())
