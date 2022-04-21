@@ -16,6 +16,7 @@ import (
 	"github.com/alecthomas/kong"
 	"github.com/jhump/protoreflect/desc"
 	"github.com/jhump/protoreflect/desc/protoparse"
+	"github.com/mkmik/tail"
 	v1 "google.golang.org/grpc/binarylog/grpc_binarylog_v1"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
@@ -219,7 +220,25 @@ func readConversations(cli *Context, r io.Reader) ([]conversation, error) {
 }
 
 func openFile(filename string, follow bool) (io.ReadCloser, error) {
-	return os.Open(filename)
+	if follow {
+		ctx, cancel := context.WithCancel(context.Background())
+		t := tail.Follow(ctx, tail.LoggerFunc(log.Printf), filename,
+			tail.Whence(io.SeekStart),
+			tail.PollTimeout(time.Minute*10))
+		return cancelCloser{Reader: t, cancel: cancel}, nil
+	} else {
+		return os.Open(filename)
+	}
+}
+
+type cancelCloser struct {
+	io.Reader
+	cancel func()
+}
+
+func (c cancelCloser) Close() error {
+	c.cancel()
+	return nil
 }
 
 func (cmd *ViewCmd) Run(cli *Context) error {
