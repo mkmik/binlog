@@ -421,7 +421,7 @@ type conversation struct {
 }
 
 func (c conversation) CallId() uint64 {
-	return c.requestHeader.CallId
+	return c.requestHeader.GetCallId()
 }
 
 func (c conversation) MethodName() string {
