@@ -36,6 +36,7 @@ type CLI struct {
 	ImportPaths    []string `optional:"" name:"proto_path" short:"I" help:"Import paths" type:"string"`
 	DescSet        []string `optional:"" name:"descriptor_set" help:"path to FileDescriptorSet, see protoc -o"`
 	CPUProfile     string   `optional:"" name:"cpuprofile" help:"write cpu profile to file"`
+	Follow         bool     `optional:"" name:"follow" short:"f" help:"Tail the file"`
 
 	Stats  StatsCmd  `cmd:"" help:"Stats"`
 	View   ViewCmd   `cmd:"" help:"View logs"`
@@ -217,8 +218,12 @@ func readConversations(cli *Context, r io.Reader) ([]conversation, error) {
 	return res, nil
 }
 
+func openFile(filename string, follow bool) (io.ReadCloser, error) {
+	return os.Open(filename)
+}
+
 func (cmd *ViewCmd) Run(cli *Context) error {
-	f, err := os.Open(cmd.LogInputFile)
+	f, err := openFile(cmd.LogInputFile, cli.Follow)
 	if err != nil {
 		return err
 	}
@@ -267,7 +272,7 @@ func (cmd *ViewCmd) Run(cli *Context) error {
 }
 
 func (cmd *StatsCmd) Run(cli *Context) error {
-	f, err := os.Open(cmd.LogInputFile)
+	f, err := openFile(cmd.LogInputFile, cli.Follow)
 	if err != nil {
 		return err
 	}
@@ -320,7 +325,7 @@ func (cmd *StatsCmd) Run(cli *Context) error {
 }
 
 func (cmd *DebugCmd) Run(cli *Context) error {
-	f, err := os.Open(cmd.LogInputFile)
+	f, err := openFile(cmd.LogInputFile, cli.Follow)
 	if err != nil {
 		return err
 	}
@@ -341,7 +346,7 @@ func (cmd *DebugCmd) Run(cli *Context) error {
 }
 
 func (cmd *FilterCmd) Run(cli *Context) error {
-	f, err := os.Open(cmd.LogInputFile)
+	f, err := openFile(cmd.LogInputFile, cli.Follow)
 	if err != nil {
 		return err
 	}
