@@ -25,6 +25,7 @@ import (
 	"google.golang.org/protobuf/reflect/protoregistry"
 	"google.golang.org/protobuf/types/descriptorpb"
 	"google.golang.org/protobuf/types/dynamicpb"
+	"mkm.pub/binlog/reader"
 )
 
 type Context struct {
@@ -357,18 +358,16 @@ func (cmd *DebugCmd) Run(cli *Context) error {
 	}
 	defer f.Close()
 
-	entries, err := readEntries(f)
-	if err != nil {
+	entries, errCh := reader.Read(f)
+
+	for e := range entries {
+		fmt.Printf("%d\t%s\t%s\n", e.CallId, e.GetType(), e.GetClientHeader().GetMethodName())
+	}
+
+	if err = <-errCh; err != nil {
 		return err
 	}
 
-	var w tabwriter.Writer
-	w.Init(os.Stdout, 0, 8, 0, '\t', 0)
-
-	for _, e := range entries {
-		fmt.Fprintf(&w, "%d\t%s\t%s\n", e.CallId, e.GetType(), e.GetClientHeader().GetMethodName())
-	}
-	w.Flush()
 	return nil
 }
 
