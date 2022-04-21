@@ -2,6 +2,7 @@ package reader
 
 import (
 	"bufio"
+	"context"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -13,7 +14,7 @@ import (
 )
 
 // ReadInto reads log entries from r and writes to channel res.
-func ReadInto(r io.Reader, res chan *v1.GrpcLogEntry) error {
+func ReadInto(ctx context.Context, r io.Reader, res chan *v1.GrpcLogEntry) error {
 	r = bufio.NewReader(r)
 
 	for {
@@ -39,19 +40,22 @@ func ReadInto(r io.Reader, res chan *v1.GrpcLogEntry) error {
 		if err := proto.Unmarshal(body, &entry); err != nil {
 			return err
 		}
-		res <- &entry
+		select {
+		case <-ctx.Done():
+		case res <- &entry:
+		}
 	}
 	return nil
 }
 
 // Read returns a channel of log entries and a channel containing the possible error.
 // The entries channel is closed when an error is returned or when the input is fully consumed.
-func Read(r io.Reader) (chan *v1.GrpcLogEntry, chan error) {
+func Read(ctx context.Context, r io.Reader) (chan *v1.GrpcLogEntry, chan error) {
 	res := make(chan *v1.GrpcLogEntry)
 	errCh := make(chan error, 1)
 
 	go func() {
-		errCh <- ReadInto(r, res)
+		errCh <- ReadInto(ctx, r, res)
 		close(res)
 		close(errCh)
 	}()

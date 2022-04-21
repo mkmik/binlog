@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -358,7 +359,8 @@ func (cmd *DebugCmd) Run(cli *Context) error {
 	}
 	defer f.Close()
 
-	entries, errCh := reader.Read(f)
+	ctx := context.Background()
+	entries, errCh := reader.Read(ctx, f)
 
 	for e := range entries {
 		fmt.Printf("%d\t%s\t%s\n", e.CallId, e.GetType(), e.GetClientHeader().GetMethodName())
@@ -378,13 +380,11 @@ func (cmd *FilterCmd) Run(cli *Context) error {
 	}
 	defer f.Close()
 
-	entries, err := readEntries(f)
-	if err != nil {
-		return err
-	}
+	ctx := context.Background()
+	entries, errCh := reader.Read(ctx, f)
 
 	w := os.Stdout
-	for _, e := range entries {
+	for e := range entries {
 		b, err := proto.Marshal(e)
 		if err != nil {
 			return err
@@ -402,6 +402,9 @@ func (cmd *FilterCmd) Run(cli *Context) error {
 		if _, err := w.Write(b); err != nil {
 			return err
 		}
+	}
+	if err = <-errCh; err != nil {
+		return err
 	}
 
 	return nil
