@@ -1,10 +1,8 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"encoding/binary"
-	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -179,48 +177,14 @@ func (c *CLI) registerServices() error {
 	return nil
 }
 
-func readEntries(r io.Reader) ([]*v1.GrpcLogEntry, error) {
-	r = bufio.NewReader(r)
-
-	var res []*v1.GrpcLogEntry
-	for {
-		hdr := make([]byte, 4)
-		if _, err := io.ReadFull(r, hdr); err != nil {
-			if errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, io.EOF) {
-				break
-			}
-			return nil, fmt.Errorf("error reading count: %w", err)
-		}
-
-		size := binary.BigEndian.Uint32(hdr)
-
-		body := make([]byte, size)
-		if _, err := io.ReadFull(r, body); err != nil {
-			if errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, io.EOF) {
-				log.Printf("last entry truncated, ignoring")
-				return res, nil
-			}
-			return nil, fmt.Errorf("error reading body: %#v %w", err, err)
-		}
-		var entry v1.GrpcLogEntry
-		if err := proto.Unmarshal(body, &entry); err != nil {
-			return nil, err
-		}
-		res = append(res, &entry)
-	}
-	return res, nil
-}
-
 func readConversations(cli *Context, r io.Reader) ([]conversation, error) {
-	entries, err := readEntries(r)
-	if err != nil {
-		return nil, err
-	}
+	ctx := context.Background()
+	entries, errCh := reader.Read(ctx, r)
 
 	var calls []uint64
 	byCall := map[uint64]conversation{}
 
-	for _, e := range entries {
+	for e := range entries {
 		conv, found := byCall[e.CallId]
 		if !found {
 			calls = append(calls, e.CallId)
@@ -239,6 +203,9 @@ func readConversations(cli *Context, r io.Reader) ([]conversation, error) {
 		}
 
 		byCall[e.CallId] = conv
+	}
+	if err := <-errCh; err != nil {
+		return nil, err
 	}
 
 	var res []conversation
@@ -366,7 +333,7 @@ func (cmd *DebugCmd) Run(cli *Context) error {
 		fmt.Printf("%d\t%s\t%s\n", e.CallId, e.GetType(), e.GetClientHeader().GetMethodName())
 	}
 
-	if err = <-errCh; err != nil {
+	if err := <-errCh; err != nil {
 		return err
 	}
 
@@ -403,7 +370,7 @@ func (cmd *FilterCmd) Run(cli *Context) error {
 			return err
 		}
 	}
-	if err = <-errCh; err != nil {
+	if err := <-errCh; err != nil {
 		return err
 	}
 
