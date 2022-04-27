@@ -18,6 +18,7 @@ import (
 	"github.com/jhump/protoreflect/desc/protoparse"
 	"github.com/mkmik/tail"
 	v1 "google.golang.org/grpc/binarylog/grpc_binarylog_v1"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protodesc"
@@ -63,8 +64,9 @@ type StatsCmd struct {
 type ViewCmd struct {
 	CmdCommon
 
-	Expand  bool `optional:"" help:"Show message bodies"`
-	Headers bool `optional:"" help:"Show headers"`
+	Expand        bool `optional:"" help:"Show message bodies"`
+	Headers       bool `optional:"" help:"Show headers"`
+	StatusMessage bool `optional:"" help:"Show status message"`
 }
 
 type DebugCmd struct {
@@ -255,13 +257,15 @@ func (cmd *ViewCmd) Run(cli *Context) error {
 
 	var w tabwriter.Writer
 	w.Init(os.Stdout, 0, 8, 0, '\t', 0)
-	fmt.Fprintf(&w, "ID\tWhen\tElapsed\tMethod\n")
+	fmt.Fprintf(&w, "ID\tWhen\tElapsed\tMethod\tStatus\n")
 	for _, c := range conversations {
 		// skip conversations that have no client headers
 		if c.CallId() == 0 {
 			continue
 		}
-		fmt.Fprintf(&w, "%d\t%s\t%s\t%s\n", c.CallId(), c.Timestamp(), c.Elapsed(), c.MethodName())
+
+		statusCode := codes.Code(c.responseTrailer.GetTrailer().GetStatusCode())
+		fmt.Fprintf(&w, "%d\t%s\t%s\t%s\t%s\n", c.CallId(), c.Timestamp(), c.Elapsed(), c.MethodName(), statusCode)
 
 		if cmd.Headers {
 			if m := c.requestHeader.GetClientHeader().GetMetadata(); len(m.GetEntry()) > 0 {
@@ -274,7 +278,6 @@ func (cmd *ViewCmd) Run(cli *Context) error {
 				fmt.Fprintf(&w, "<-{t}\t%s\n", renderMetadata(m))
 			}
 		}
-
 		if cmd.Expand {
 			if err := c.FormatRequest(&w, cli); err != nil {
 				fmt.Fprintf(&w, "->\t%v\n", err)
@@ -283,6 +286,11 @@ func (cmd *ViewCmd) Run(cli *Context) error {
 				fmt.Fprintf(&w, "<-\t%v\n", err)
 			}
 			fmt.Fprintln(&w)
+		}
+		if cmd.StatusMessage {
+			if t := c.responseTrailer.GetTrailer(); t != nil {
+				fmt.Fprintf(&w, "<-{s}\t%s\n", t.StatusMessage)
+			}
 		}
 	}
 	w.Flush()
