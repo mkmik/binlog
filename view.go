@@ -11,9 +11,10 @@ import (
 type ViewCmd struct {
 	CmdCommon
 
-	Expand        bool `optional:"" help:"Show message bodies"`
-	Headers       bool `optional:"" help:"Show headers"`
-	StatusMessage bool `optional:"" help:"Show status message"`
+	Expand        bool   `optional:"" help:"Show message bodies"`
+	Headers       bool   `optional:"" help:"Show headers"`
+	StatusMessage bool   `optional:"" help:"Show status message"`
+	CallID        uint64 `optional:"" help:"Only view conversation with this call id"`
 }
 
 func (cmd *ViewCmd) Run(cli *Context) error {
@@ -35,6 +36,12 @@ func (cmd *ViewCmd) Run(cli *Context) error {
 		// skip conversations that have no client headers
 		if c.CallId() == 0 {
 			continue
+		}
+
+		if cmd.CallID != 0 {
+			if c.CallId() != cmd.CallID {
+				continue
+			}
 		}
 
 		statusCode := codes.Code(c.responseTrailer.GetTrailer().GetStatusCode())

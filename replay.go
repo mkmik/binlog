@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"time"
@@ -43,8 +44,15 @@ func (cmd *ReplayCmd) Run(cli *Context) error {
 	}
 
 	w := os.Stdout
-	for id, c := range conversations {
-		fmt.Fprintf(w, "%d\t%s\t%s\n", id, time.Now().Format("2006/01/02 15:04:05.000000"), c.MethodName())
+	fmt.Fprintf(w, "ID\tWhen\tMethod\n")
+	for _, c := range conversations {
+		if cmd.CallID != 0 {
+			if c.CallId() != cmd.CallID {
+				continue
+			}
+		}
+
+		fmt.Fprintf(w, "%d\t%s\t%s\n", c.CallId(), time.Now().Format("2006/01/02 15:04:05.000000"), c.MethodName())
 		if err := replayConversation(ctx, conn, &c); err != nil {
 			return err
 		}
@@ -60,27 +68,49 @@ func (cmd *ReplayCmd) Run(cli *Context) error {
 }
 
 func replayConversation(ctx context.Context, conn *grpc.ClientConn, c *conversation) error {
-	if got, want := len(c.requestMessages), 1; got != want {
-		return fmt.Errorf("only unary messages are support (got %d client messages)", got)
+	desc := &grpc.StreamDesc{
+		ClientStreams: len(c.requestMessages) != 0,
+		ServerStreams: len(c.responseMessages) != 0,
 	}
-	c.responseMessages = nil
-
-	var res []byte
-	err := conn.Invoke(ctx, c.MethodName(), c.requestMessages[0].GetMessage().Data, &res, grpc.ForceCodec(&noopCodec{}))
+	stream, err := conn.NewStream(ctx, desc, c.MethodName(), grpc.ForceCodec(&noopCodec{}))
 	if err != nil {
 		return err
 	}
 
-	rm := &grpc_binarylog_v1.GrpcLogEntry{
-		Timestamp: timestamppb.Now(),
-		Payload: &grpc_binarylog_v1.GrpcLogEntry_Message{
-			Message: &grpc_binarylog_v1.Message{
-				Length: uint32(len(res)),
-				Data:   res,
-			},
-		},
+	for _, msg := range c.requestMessages {
+		if err := stream.SendMsg(msg.GetMessage().Data); err != nil {
+			return err
+		}
 	}
-	c.responseMessages = append(c.responseMessages, rm)
+	if err := stream.CloseSend(); err != nil {
+		return err
+	}
+
+	c.responseMessages = nil
+	for {
+		var res []byte
+		err := stream.RecvMsg(&res)
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return fmt.Errorf("stream recv: %w", err)
+		}
+		if err != nil {
+			return err
+		}
+
+		rm := &grpc_binarylog_v1.GrpcLogEntry{
+			Timestamp: timestamppb.Now(),
+			Payload: &grpc_binarylog_v1.GrpcLogEntry_Message{
+				Message: &grpc_binarylog_v1.Message{
+					Length: uint32(len(res)),
+					Data:   res,
+				},
+			},
+		}
+		c.responseMessages = append(c.responseMessages, rm)
+	}
 
 	return nil
 }
