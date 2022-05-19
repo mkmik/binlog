@@ -10,7 +10,6 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/binarylog/grpc_binarylog_v1"
 	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -38,15 +37,6 @@ func (cmd *ReplayCmd) Run(cli *Context) error {
 		return err
 	}
 
-	if false {
-		health := grpc_health_v1.NewHealthClient(conn)
-		res, err := health.Check(ctx, &grpc_health_v1.HealthCheckRequest{})
-		if err != nil {
-			return fmt.Errorf("performing health check: %w", err)
-		}
-		log.Println("Health", res)
-	}
-
 	conversations, err := readConversations(cli, f)
 	if err != nil {
 		return err
@@ -70,13 +60,11 @@ func (cmd *ReplayCmd) Run(cli *Context) error {
 }
 
 func replayConversation(ctx context.Context, conn *grpc.ClientConn, c *conversation) error {
-	log.Printf("replaying %q", c.MethodName())
 	var res []byte
 	err := conn.Invoke(ctx, c.MethodName(), c.requestMessages[0].GetMessage().Data, &res, grpc.ForceCodec(&noopCodec{}))
 	if err != nil {
 		return err
 	}
-	log.Printf("response: %#v", res)
 
 	rh := grpc_binarylog_v1.GrpcLogEntry{
 		Timestamp: timestamppb.Now(),
