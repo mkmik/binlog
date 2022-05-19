@@ -68,13 +68,10 @@ func (cmd *ReplayCmd) Run(cli *Context) error {
 }
 
 func replayConversation(ctx context.Context, conn *grpc.ClientConn, c *conversation) error {
-	c.responseMessages = nil
-
-	//err := conn.Invoke(ctx, c.MethodName(), c.requestMessages[0].GetMessage().Data, &res, grpc.ForceCodec(&noopCodec{}))
-
-	// tentative impl for replay of streaming messages
-
-	desc := &grpc.StreamDesc{}
+	desc := &grpc.StreamDesc{
+		ClientStreams: len(c.requestMessages) != 0,
+		ServerStreams: len(c.responseMessages) != 0,
+	}
 	stream, err := conn.NewStream(ctx, desc, c.MethodName(), grpc.ForceCodec(&noopCodec{}))
 	if err != nil {
 		return err
@@ -85,7 +82,11 @@ func replayConversation(ctx context.Context, conn *grpc.ClientConn, c *conversat
 			return err
 		}
 	}
+	if err := stream.CloseSend(); err != nil {
+		return err
+	}
 
+	c.responseMessages = nil
 	for {
 		var res []byte
 		err := stream.RecvMsg(&res)
@@ -93,7 +94,7 @@ func replayConversation(ctx context.Context, conn *grpc.ClientConn, c *conversat
 			break
 		}
 		if err != nil {
-			return err
+			return fmt.Errorf("stream recv: %w", err)
 		}
 		if err != nil {
 			return err
