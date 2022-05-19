@@ -37,6 +37,7 @@ type CLI struct {
 	View   ViewCmd   `cmd:"" help:"View logs"`
 	Debug  DebugCmd  `cmd:"" help:"debug"`
 	Filter FilterCmd `cmd:"" help:"Create a smaller binlog out of a binlog file"`
+	Replay ReplayCmd `cmd:"" help:"Replay requests from a binary log to a new gRPC server"`
 
 	methods map[string]methodTypes
 }
@@ -218,7 +219,7 @@ func formatMessages(w io.Writer, prefix string, entries []*v1.GrpcLogEntry, mess
 		if err != nil {
 			return err
 		}
-		if _, err := fmt.Fprintf(w, "%s\t%s", prefix, b); err != nil {
+		if _, err := fmt.Fprintf(w, "%s\t%s\n", prefix, b); err != nil {
 			return err
 		}
 	}
@@ -238,7 +239,7 @@ func (c conversation) FormatResponse(w io.Writer, ctx *Context) error {
 	if err != nil {
 		return err
 	}
-	return formatMessages(w, "->", c.responseMessages, msgType)
+	return formatMessages(w, "<-", c.responseMessages, msgType)
 }
 
 func (c conversation) RequestMessageType(ctx *Context) (string, error) {
