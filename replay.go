@@ -88,6 +88,6 @@ func replayConversation(ctx context.Context, conn *grpc.ClientConn, c *conversat
 // A noopCodec just passes around already encoded grpc payloads.
 type noopCodec struct{}
 
-func (d *noopCodec) Marshal(v interface{}) ([]byte, error)      { return v.([]byte), nil }
-func (d *noopCodec) Unmarshal(data []byte, v interface{}) error { *v.(*[]byte) = data; return nil }
-func (d *noopCodec) Name() string                               { return "noop" }
+func (d *noopCodec) Marshal(v any) ([]byte, error)      { return v.([]byte), nil }
+func (d *noopCodec) Unmarshal(data []byte, v any) error { *v.(*[]byte) = data; return nil }
+func (d *noopCodec) Name() string                       { return "noop" }
