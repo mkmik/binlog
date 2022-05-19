@@ -2,29 +2,22 @@ package main
 
 import (
 	"context"
-	"encoding/binary"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"os"
 	"runtime/pprof"
 	"strings"
-	"text/tabwriter"
 	"time"
 
 	"github.com/alecthomas/kong"
-	"github.com/jhump/protoreflect/desc"
 	"github.com/jhump/protoreflect/desc/protoparse"
 	"github.com/mkmik/tail"
 	v1 "google.golang.org/grpc/binarylog/grpc_binarylog_v1"
-	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/reflect/protodesc"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
-	"google.golang.org/protobuf/types/descriptorpb"
 	"google.golang.org/protobuf/types/dynamicpb"
 	"mkm.pub/binlog/reader"
 )
@@ -55,28 +48,6 @@ type methodTypes struct {
 
 type CmdCommon struct {
 	LogInputFile string `arg:"" name:"log_input_file" help:"Binary log input file"`
-}
-
-type StatsCmd struct {
-	CmdCommon
-}
-
-type ViewCmd struct {
-	CmdCommon
-
-	Expand        bool `optional:"" help:"Show message bodies"`
-	Headers       bool `optional:"" help:"Show headers"`
-	StatusMessage bool `optional:"" help:"Show status message"`
-}
-
-type DebugCmd struct {
-	CmdCommon
-}
-
-type FilterCmd struct {
-	CmdCommon
-
-	CallID uint64 `optional:""`
 }
 
 func (c *CLI) AfterApply() error {
@@ -112,52 +83,6 @@ func (c *CLI) startCPUProfile() {
 
 func (c *CLI) OnExit() {
 	pprof.StopCPUProfile()
-}
-
-func registerFileDescriptorSets(filenames []string) error {
-	for _, descSetFileName := range filenames {
-		b, err := ioutil.ReadFile(descSetFileName)
-		if os.IsNotExist(err) {
-			continue
-		}
-		if err != nil {
-			return err
-		}
-		var fdset descriptorpb.FileDescriptorSet
-		if err := proto.Unmarshal(b, &fdset); err != nil {
-			return err
-		}
-		for _, fdp := range fdset.File {
-			if err := registerFileDescriptor(fdp); err != nil {
-				return fmt.Errorf("fdset %s, file %s: %w", descSetFileName, fdp.GetName(), err)
-			}
-		}
-	}
-	return nil
-}
-
-func registerFileDescriptors(fds []*desc.FileDescriptor) error {
-	for _, fd := range fds {
-		if err := registerFileDescriptor(fd.AsFileDescriptorProto()); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func registerFileDescriptor(fdp *descriptorpb.FileDescriptorProto) error {
-	fdr, err := protodesc.NewFile(fdp, protoregistry.GlobalFiles)
-	if err != nil {
-		return err
-	}
-	if err := protoregistry.GlobalFiles.RegisterFile(fdr); err != nil {
-		return err
-	}
-	for i := 0; i < fdr.Messages().Len(); i++ {
-		mt := dynamicpb.NewMessageType(fdr.Messages().Get(i))
-		protoregistry.GlobalTypes.RegisterMessage(mt)
-	}
-	return nil
 }
 
 func (c *CLI) registerServices() error {
@@ -240,172 +165,6 @@ type cancelCloser struct {
 
 func (c cancelCloser) Close() error {
 	c.cancel()
-	return nil
-}
-
-func (cmd *ViewCmd) Run(cli *Context) error {
-	f, err := openFile(cmd.LogInputFile, cli.Follow)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	conversations, err := readConversations(cli, f)
-	if err != nil {
-		return err
-	}
-
-	var w tabwriter.Writer
-	w.Init(os.Stdout, 0, 8, 0, '\t', 0)
-	fmt.Fprintf(&w, "ID\tWhen\tElapsed\tMethod\tStatus\n")
-	for _, c := range conversations {
-		// skip conversations that have no client headers
-		if c.CallId() == 0 {
-			continue
-		}
-
-		statusCode := codes.Code(c.responseTrailer.GetTrailer().GetStatusCode())
-		fmt.Fprintf(&w, "%d\t%s\t%s\t%s\t%s\n", c.CallId(), c.Timestamp(), c.Elapsed(), c.MethodName(), statusCode)
-
-		if cmd.Headers {
-			if m := c.requestHeader.GetClientHeader().GetMetadata(); len(m.GetEntry()) > 0 {
-				fmt.Fprintf(&w, "->{h}\t%s\n", renderMetadata(m))
-			}
-			if m := c.responseHeader.GetServerHeader().GetMetadata(); len(m.GetEntry()) > 0 {
-				fmt.Fprintf(&w, "<-{h}\t%s\n", renderMetadata(m))
-			}
-			if m := c.responseTrailer.GetTrailer().GetMetadata(); len(m.GetEntry()) > 0 {
-				fmt.Fprintf(&w, "<-{t}\t%s\n", renderMetadata(m))
-			}
-		}
-		if cmd.Expand {
-			if err := c.FormatRequest(&w, cli); err != nil {
-				fmt.Fprintf(&w, "->\t%v\n", err)
-			}
-			if err := c.FormatResponse(&w, cli); err != nil {
-				fmt.Fprintf(&w, "<-\t%v\n", err)
-			}
-			fmt.Fprintln(&w)
-		}
-		if cmd.StatusMessage {
-			if t := c.responseTrailer.GetTrailer(); t != nil {
-				fmt.Fprintf(&w, "<-{s}\t%s\n", t.StatusMessage)
-			}
-		}
-	}
-	w.Flush()
-
-	return nil
-}
-
-func (cmd *StatsCmd) Run(cli *Context) error {
-	f, err := openFile(cmd.LogInputFile, cli.Follow)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	conversations, err := readConversations(cli, f)
-	if err != nil {
-		return err
-	}
-	buckets := [8]time.Duration{
-		0,
-		time.Millisecond * 50,
-		time.Millisecond * 100,
-		time.Millisecond * 200,
-		time.Millisecond * 500,
-		time.Second * 1,
-		time.Second * 10,
-		time.Second * 100,
-	}
-	histogramByMethod := map[string][8]int{}
-	for _, c := range conversations {
-		e := c.ElapsedDuration()
-		histogram := histogramByMethod[c.MethodName()]
-		for i, b := range buckets {
-			if e >= b {
-				histogram[i]++
-			}
-		}
-		histogramByMethod[c.MethodName()] = histogram
-	}
-
-	var w tabwriter.Writer
-	w.Init(os.Stdout, 0, 8, 0, '\t', 0)
-	fmt.Fprintf(&w, "Method\t[≥0s]\t[≥0.05s]\t[≥0.1s]\t[≥0.2s]\t[≥0.5s]\t[≥1s]\t[≥10s]\t[≥100s]\t[errors]\n")
-	for method, histogram := range histogramByMethod {
-		b0 := histogram[0]
-		b1 := histogram[1]
-		b2 := histogram[2]
-		b3 := histogram[3]
-		b4 := histogram[4]
-		b5 := histogram[5]
-		b6 := histogram[6]
-		b7 := histogram[7]
-
-		fmt.Fprintf(&w, "%s\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\n", method, b0, b1, b2, b3, b4, b5, b6, b7)
-	}
-	w.Flush()
-
-	return nil
-}
-
-func (cmd *DebugCmd) Run(cli *Context) error {
-	f, err := openFile(cmd.LogInputFile, cli.Follow)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	ctx := context.Background()
-	entries, errCh := reader.Read(ctx, f)
-
-	for e := range entries {
-		fmt.Printf("%d\t%s\t%s\n", e.CallId, e.GetType(), e.GetClientHeader().GetMethodName())
-	}
-
-	if err := <-errCh; err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (cmd *FilterCmd) Run(cli *Context) error {
-	f, err := openFile(cmd.LogInputFile, cli.Follow)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	ctx := context.Background()
-	entries, errCh := reader.Read(ctx, f)
-
-	w := os.Stdout
-	for e := range entries {
-		b, err := proto.Marshal(e)
-		if err != nil {
-			return err
-		}
-		if cmd.CallID != 0 {
-			if e.CallId != cmd.CallID {
-				continue
-			}
-		}
-
-		if err := binary.Write(w, binary.BigEndian, uint32(len(b))); err != nil {
-			return err
-		}
-
-		if _, err := w.Write(b); err != nil {
-			return err
-		}
-	}
-	if err := <-errCh; err != nil {
-		return err
-	}
-
 	return nil
 }
 
