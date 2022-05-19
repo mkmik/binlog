@@ -71,10 +71,16 @@ func replayConversation(ctx context.Context, conn *grpc.ClientConn, c *conversat
 		return err
 	}
 
-	rh := grpc_binarylog_v1.GrpcLogEntry{
+	rm := &grpc_binarylog_v1.GrpcLogEntry{
 		Timestamp: timestamppb.Now(),
+		Payload: &grpc_binarylog_v1.GrpcLogEntry_Message{
+			Message: &grpc_binarylog_v1.Message{
+				Length: uint32(len(res)),
+				Data:   res,
+			},
+		},
 	}
-	c.responseHeader = &rh
+	c.responseMessages = append(c.responseMessages, rm)
 
 	return nil
 }
