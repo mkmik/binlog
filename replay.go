@@ -43,8 +43,15 @@ func (cmd *ReplayCmd) Run(cli *Context) error {
 	}
 
 	w := os.Stdout
-	for id, c := range conversations {
-		fmt.Fprintf(w, "%d\t%s\t%s\n", id, time.Now().Format("2006/01/02 15:04:05.000000"), c.MethodName())
+	fmt.Fprintf(w, "ID\tWhen\tMethod\n")
+	for _, c := range conversations {
+		if cmd.CallID != 0 {
+			if c.CallId() != cmd.CallID {
+				continue
+			}
+		}
+
+		fmt.Fprintf(w, "%d\t%s\t%s\n", c.CallId(), time.Now().Format("2006/01/02 15:04:05.000000"), c.MethodName())
 		if err := replayConversation(ctx, conn, &c); err != nil {
 			return err
 		}
