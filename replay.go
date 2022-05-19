@@ -60,6 +60,11 @@ func (cmd *ReplayCmd) Run(cli *Context) error {
 }
 
 func replayConversation(ctx context.Context, conn *grpc.ClientConn, c *conversation) error {
+	if got, want := len(c.requestMessages), 1; got != want {
+		return fmt.Errorf("only unary messages are support (got %d client messages)", got)
+	}
+	c.responseMessages = nil
+
 	var res []byte
 	err := conn.Invoke(ctx, c.MethodName(), c.requestMessages[0].GetMessage().Data, &res, grpc.ForceCodec(&noopCodec{}))
 	if err != nil {
