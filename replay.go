@@ -44,7 +44,7 @@ func (cmd *ReplayCmd) Run(cli *Context) error {
 	}
 
 	w := os.Stdout
-	fmt.Fprintf(w, "ID\tWhen\tMethod\n")
+	fmt.Fprintf(w, "ID\tWhen\tElapsed\tMethod\tStatus\tDetails\n")
 	for _, c := range conversations {
 		// skip conversations that have no client headers
 		if c.CallId() == 0 {
@@ -56,16 +56,18 @@ func (cmd *ReplayCmd) Run(cli *Context) error {
 				continue
 			}
 		}
-
-		fmt.Fprintf(w, "%d\t%s\t%s\n", c.CallId(), time.Now().Format("2006/01/02 15:04:05.000000"), c.MethodName())
+		start := time.Now()
+		fmt.Fprintf(w, "%d\t%s\t\t%s\n", c.CallId(), start.Format("2006/01/02 15:04:05.000000"), c.MethodName())
 		rpcerr := replayConversation(ctx, conn, &c)
 		if cmd.Expand {
 			if err := c.FormatResponse(w, cli); err != nil {
 				log.Printf("render response: %v", err)
 			}
 		}
+		end := time.Now()
+		elapsed := end.Sub(start)
 		st := status.Convert(rpcerr)
-		fmt.Fprintf(w, "<-{s}\t%s\t%s\n", st.Code(), st.Message())
+		fmt.Fprintf(w, "<-{s}\t%s\t%s\t\t%s\t%s\n", end.Format("2006/01/02 15:04:05.000000"), elapsed, st.Code(), st.Message())
 	}
 	return nil
 }
