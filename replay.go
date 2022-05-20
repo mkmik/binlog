@@ -46,6 +46,11 @@ func (cmd *ReplayCmd) Run(cli *Context) error {
 	w := os.Stdout
 	fmt.Fprintf(w, "ID\tWhen\tMethod\n")
 	for _, c := range conversations {
+		// skip conversations that have no client headers
+		if c.CallId() == 0 {
+			continue
+		}
+
 		if cmd.CallID != 0 {
 			if c.CallId() != cmd.CallID {
 				continue
