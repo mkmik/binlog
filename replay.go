@@ -58,15 +58,13 @@ func (cmd *ReplayCmd) Run(cli *Context) error {
 		}
 
 		fmt.Fprintf(w, "%d\t%s\t%s\n", c.CallId(), time.Now().Format("2006/01/02 15:04:05.000000"), c.MethodName())
-		if err := replayConversation(ctx, conn, &c); err != nil {
-			return err
-		}
+		rpcerr := replayConversation(ctx, conn, &c)
 		if cmd.Expand {
 			if err := c.FormatResponse(w, cli); err != nil {
 				log.Printf("render response: %v", err)
 			}
 		}
-		st := status.Convert(err)
+		st := status.Convert(rpcerr)
 		fmt.Fprintf(w, "<-{s}\t%s\t%s\n", st.Code(), st.Message())
 	}
 	return nil
@@ -97,9 +95,6 @@ func replayConversation(ctx context.Context, conn *grpc.ClientConn, c *conversat
 		err := stream.RecvMsg(&res)
 		if err == io.EOF {
 			break
-		}
-		if err != nil {
-			return fmt.Errorf("stream recv: %w", err)
 		}
 		if err != nil {
 			return err
