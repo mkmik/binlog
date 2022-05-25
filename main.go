@@ -27,8 +27,8 @@ type Context struct {
 }
 
 type CLI struct {
-	ProtoFileNames []string `optional:"" name:"proto" short:"p" help:"Proto files" type:"string"`
-	ImportPaths    []string `optional:"" name:"proto_path" short:"I" help:"Import paths" type:"string"`
+	ProtoFileNames []string `optional:"" name:"proto" short:"p" help:"Proto files" type:"string" env:"BINLOG_PROTO_FILES"`
+	ImportPaths    []string `optional:"" name:"proto_path" short:"I" help:"Import paths" type:"string" env:"BINLOG_IMPORT_PATH"`
 	DescSet        []string `optional:"" name:"descriptor_set" help:"path to FileDescriptorSet, see protoc -o"`
 	CPUProfile     string   `optional:"" name:"cpuprofile" help:"write cpu profile to file"`
 	Follow         bool     `optional:"" name:"follow" short:"f" help:"Tail the file"`
