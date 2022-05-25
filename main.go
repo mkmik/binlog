@@ -38,6 +38,8 @@ type CLI struct {
 	Debug  DebugCmd  `cmd:"" help:"debug"`
 	Filter FilterCmd `cmd:"" help:"Create a smaller binlog out of a binlog file"`
 	Replay ReplayCmd `cmd:"" help:"Replay requests from a binary log to a new gRPC server"`
+	Decode DecodeCmd `cmd:"" help:"Decode binary binlog into a textual representation"`
+	Encode EncodeCmd `cmd:"" help:"Encode binary binlog from a textual representation"`
 
 	methods map[string]methodTypes
 }
@@ -107,6 +109,21 @@ func (c *CLI) registerServices() error {
 	return nil
 }
 
+func (c *conversation) Record(e *v1.GrpcLogEntry) {
+	switch e.Type {
+	case v1.GrpcLogEntry_EVENT_TYPE_CLIENT_HEADER:
+		c.requestHeader = e
+	case v1.GrpcLogEntry_EVENT_TYPE_CLIENT_MESSAGE:
+		c.requestMessages = append(c.requestMessages, e)
+	case v1.GrpcLogEntry_EVENT_TYPE_SERVER_HEADER:
+		c.responseHeader = e
+	case v1.GrpcLogEntry_EVENT_TYPE_SERVER_MESSAGE:
+		c.responseMessages = append(c.responseMessages, e)
+	case v1.GrpcLogEntry_EVENT_TYPE_SERVER_TRAILER:
+		c.responseTrailer = e
+	}
+}
+
 func readConversations(cli *Context, r io.Reader) ([]conversation, error) {
 	ctx := context.Background()
 	entries, errCh := reader.Read(ctx, r)
@@ -119,19 +136,7 @@ func readConversations(cli *Context, r io.Reader) ([]conversation, error) {
 		if !found {
 			calls = append(calls, e.CallId)
 		}
-		switch e.Type {
-		case v1.GrpcLogEntry_EVENT_TYPE_CLIENT_HEADER:
-			conv.requestHeader = e
-		case v1.GrpcLogEntry_EVENT_TYPE_CLIENT_MESSAGE:
-			conv.requestMessages = append(conv.requestMessages, e)
-		case v1.GrpcLogEntry_EVENT_TYPE_SERVER_HEADER:
-			conv.responseHeader = e
-		case v1.GrpcLogEntry_EVENT_TYPE_SERVER_MESSAGE:
-			conv.responseMessages = append(conv.responseMessages, e)
-		case v1.GrpcLogEntry_EVENT_TYPE_SERVER_TRAILER:
-			conv.responseTrailer = e
-		}
-
+		conv.Record(e)
 		byCall[e.CallId] = conv
 	}
 	if err := <-errCh; err != nil {
@@ -286,7 +291,7 @@ func parseBody(raw []byte, messageType string) (proto.Message, error) {
 	}
 	msg := dynamicpb.NewMessage(msgDesc)
 	if err := proto.Unmarshal(raw, msg); err != nil {
-		return nil, fmt.Errorf("cannot dynamicaly unmarshal raw message: %w", err)
+		return nil, fmt.Errorf("cannot dynamicaly unmarshal raw message %w", err)
 	}
 	return msg, nil
 }
