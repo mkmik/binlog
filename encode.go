@@ -47,10 +47,6 @@ func (cmd *EncodeCmd) Run(cli *Context) error {
 					return fmt.Errorf("cannot find headers for call ID %d", callId)
 				}
 
-				decoded, err := json.Marshal(msg["decoded"])
-				if err != nil {
-					return err
-				}
 				messageType, err := conv.RequestMessageType(cli)
 				if err != nil {
 					return err
@@ -59,10 +55,14 @@ func (cmd *EncodeCmd) Run(cli *Context) error {
 				if err != nil {
 					return err
 				}
-				if err := protojson.Unmarshal([]byte(decoded), dataMessage); err != nil {
+				decoded, err := json.Marshal(msg["decoded"])
+				if err != nil {
 					return err
 				}
 				delete(msg, "decoded")
+				if err := protojson.Unmarshal([]byte(decoded), dataMessage); err != nil {
+					return err
+				}
 				encoded, err := proto.Marshal(dataMessage)
 				if err != nil {
 					return err
