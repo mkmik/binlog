@@ -153,6 +153,9 @@ func readConversations(cli *Context, r io.Reader) ([]conversation, error) {
 }
 
 func openFile(filename string, follow bool) (io.ReadCloser, error) {
+	if filename == "-" {
+		filename = "/dev/stdin"
+	}
 	if follow {
 		ctx, cancel := context.WithCancel(context.Background())
 		t := tail.Follow(ctx, tail.LoggerFunc(log.Printf), filename,
