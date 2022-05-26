@@ -10,9 +10,6 @@ import (
 	v1 "google.golang.org/grpc/binarylog/grpc_binarylog_v1"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/reflect/protoreflect"
-	"google.golang.org/protobuf/reflect/protoregistry"
-	"google.golang.org/protobuf/types/dynamicpb"
 )
 
 type EncodeCmd struct {
@@ -50,24 +47,18 @@ func (cmd *EncodeCmd) Run(cli *Context) error {
 					return fmt.Errorf("cannot find headers for call ID %d", callId)
 				}
 
-				messageType, err := conv.RequestMessageType(cli)
-				if err != nil {
-					return err
-				}
-				desc, err := protoregistry.GlobalFiles.FindDescriptorByName(protoreflect.FullName(messageType))
-				if err != nil {
-					return fmt.Errorf("cannot find descriptor for %q: %w", messageType, err)
-				}
-				msgDesc, ok := desc.(protoreflect.MessageDescriptor)
-				if !ok {
-					return fmt.Errorf("%s is not a message", messageType)
-				}
-
 				decoded, err := json.Marshal(msg["decoded"])
 				if err != nil {
 					return err
 				}
-				dataMessage := dynamicpb.NewMessage(msgDesc)
+				messageType, err := conv.RequestMessageType(cli)
+				if err != nil {
+					return err
+				}
+				dataMessage, err := newDynamicMessage(messageType)
+				if err != nil {
+					return err
+				}
 				if err := protojson.Unmarshal([]byte(decoded), dataMessage); err != nil {
 					return err
 				}

@@ -281,6 +281,17 @@ func formatEntry(entry *v1.GrpcLogEntry, messageType string) ([]byte, error) {
 }
 
 func parseBody(raw []byte, messageType string) (proto.Message, error) {
+	msg, err := newDynamicMessage(messageType)
+	if err != nil {
+		return nil, err
+	}
+	if err := proto.Unmarshal(raw, msg); err != nil {
+		return nil, fmt.Errorf("cannot dynamicaly unmarshal raw message %w", err)
+	}
+	return msg, nil
+}
+
+func newDynamicMessage(messageType string) (proto.Message, error) {
 	desc, err := protoregistry.GlobalFiles.FindDescriptorByName(protoreflect.FullName(messageType))
 	if err != nil {
 		return nil, fmt.Errorf("cannot find descriptor for %q: %w", messageType, err)
@@ -289,11 +300,7 @@ func parseBody(raw []byte, messageType string) (proto.Message, error) {
 	if !ok {
 		return nil, fmt.Errorf("%s is not a message", messageType)
 	}
-	msg := dynamicpb.NewMessage(msgDesc)
-	if err := proto.Unmarshal(raw, msg); err != nil {
-		return nil, fmt.Errorf("cannot dynamicaly unmarshal raw message %w", err)
-	}
-	return msg, nil
+	return dynamicpb.NewMessage(msgDesc), nil
 }
 
 func main() {
