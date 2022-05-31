@@ -22,7 +22,7 @@ func (cmd *SendCmd) Run(cli *Context) error {
 	ctx := context.Background()
 	client, err := grpc.DialContext(ctx, cmd.Target, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
-
+		return err
 	}
 	sink := v1.NewLogSinkServiceClient(client)
 
