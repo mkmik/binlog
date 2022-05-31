@@ -40,6 +40,8 @@ type CLI struct {
 	Replay ReplayCmd `cmd:"" help:"Replay requests from a binary log to a new gRPC server"`
 	Decode DecodeCmd `cmd:"" help:"Decode binary binlog into a textual representation"`
 	Encode EncodeCmd `cmd:"" help:"Encode binary binlog from a textual representation"`
+	Send   SendCmd   `cmd:"" help:"Tail a binary log file and send entries to a remote binary log collector"`
+	Recv   RecvCmd   `cmd:"" help:"Exposes a gRPC server that receives binary logs" name:"receive"`
 
 	methods map[string]methodTypes
 }

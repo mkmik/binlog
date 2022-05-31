@@ -1,0 +1,38 @@
+syntax = "proto3";
+
+package influxdata.grpc.binarylogsink.v1;
+
+option go_package = "mkm.pub/binlog/proto/v1";
+
+import "grpc/binlog/v1/binarylog.proto";
+
+service LogSinkService {
+  // Receives a GrpcLogEntry
+  rpc Write(WriteRequest) returns (WriteResponse) {}
+}
+
+// Request object for sending a gRPC log entry to be written.
+message WriteRequest {
+  // A unique ID for the call to enable the receiving server to correctly
+  // stitch together conversations from multiple clients (in grpc the call_id
+  // field is only unique for each caller).
+  // Use some unique property of the workload to generate the ID: something
+  // random, or podname + startup time or similar, followed by the actual
+  // gRPC call_id.
+  // Recall that pod names and IP addresses will usually stay the same across
+  // container restarts in k8s.
+  string call_id = 1;
+
+  // Text identifier to differentiate where the logs came from, if that's
+  // important to you. E.g. if using this API to collect logs for comparison of
+  // correctness or performance, you might use this to differentiate them.
+  // We'll be using "iox" and "tsm" for our query correctness work.
+  // If you don't care about this you can safely put any old string here.
+  string origin = 2;
+
+  // The actual gRPC log entry being written.
+  .grpc.binarylog.v1.GrpcLogEntry entry = 3;
+}
+
+// Response to the Write request
+message WriteResponse {}
