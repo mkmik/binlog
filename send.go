@@ -3,9 +3,12 @@ package main
 import (
 	"context"
 	"fmt"
+	"log"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/status"
 	v1 "mkm.pub/binlog/proto"
 	"mkm.pub/binlog/reader"
 )
@@ -29,12 +32,16 @@ func (cmd *SendCmd) Run(cli *Context) error {
 	entries, errCh := reader.ReadFile(ctx, cmd.LogInputFile, cli.Follow)
 
 	for e := range entries {
-		_, err := sink.Write(ctx, &v1.WriteRequest{
+		req := &v1.WriteRequest{
 			Origin: cmd.Origin,
 			CallId: fmt.Sprintf("%s-%d", cmd.Prefix, e.CallId),
 			Entry:  e,
-		})
-		if err != nil {
+		}
+		_, err := sink.Write(ctx, req)
+		if status.Code(err) == codes.AlreadyExists {
+			log.Printf("already exists: %s, %s", req.Origin, req.CallId)
+			continue
+		} else if err != nil {
 			return err
 		}
 	}
