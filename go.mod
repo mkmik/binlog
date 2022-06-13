@@ -3,7 +3,7 @@ module mkm.pub/binlog
 go 1.18
 
 require (
-	github.com/alecthomas/kong v0.5.0
+	github.com/alecthomas/kong v0.6.0
 	github.com/jhump/protoreflect v1.12.0
 	github.com/mkmik/tail v0.1.1-0.20220421025734-052187293294
 	google.golang.org/grpc v1.46.2
@@ -18,5 +18,5 @@ require (
 	golang.org/x/sys v0.0.0-20210510120138-977fb7262007 // indirect
 	golang.org/x/text v0.3.5 // indirect
 	google.golang.org/genproto v0.0.0-20200707001353-8e8330bf89df // indirect
-	gopkg.in/yaml.v3 v3.0.0 // indirect
+	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
