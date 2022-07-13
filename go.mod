@@ -6,7 +6,7 @@ require (
 	github.com/alecthomas/kong v0.6.1
 	github.com/jhump/protoreflect v1.12.0
 	github.com/mkmik/tail v0.1.1-0.20220421025734-052187293294
-	google.golang.org/grpc v1.47.0
+	google.golang.org/grpc v1.48.0
 	google.golang.org/protobuf v1.28.0
 )
 
