@@ -36,14 +36,14 @@ func (cmd *FetchCmd) Run(cli *Context) error {
 	}
 	w := os.Stdout
 	for {
-		e, err := res.Recv()
+		r, err := res.Recv()
 		if err == io.EOF {
 			break
 		} else if err != nil {
 			return err
 		}
 
-		b, err := proto.Marshal(e)
+		b, err := proto.Marshal(r.Entry)
 		if err != nil {
 			return err
 		}
