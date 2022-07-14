@@ -42,6 +42,7 @@ type CLI struct {
 	Encode EncodeCmd `cmd:"" help:"Encode binary binlog from a textual representation"`
 	Send   SendCmd   `cmd:"" help:"Tail a binary log file and send entries to a remote binary log collector"`
 	Recv   RecvCmd   `cmd:"" help:"Exposes a gRPC server that receives binary logs" name:"receive"`
+	Fetch  FetchCmd  `cmd:"" help:"Read gRPC binlog entries from remote collector"`
 
 	methods map[string]methodTypes
 }
