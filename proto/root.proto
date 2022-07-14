@@ -2,9 +2,9 @@ syntax = "proto3";
 
 package influxdata.grpc.binarylogsink.v1;
 
-option go_package = "mkm.pub/binlog/proto/v1";
-
 import "grpc/binlog/v1/binarylog.proto";
+
+option go_package = "mkm.pub/binlog/proto/v1";
 
 service LogSinkService {
   // Receives a GrpcLogEntry
@@ -36,3 +36,17 @@ message WriteRequest {
 
 // Response to the Write request
 message WriteResponse {}
+
+service LogReaderService {
+  rpc Read(ReadRequest) returns (stream ReadResponse) {}
+}
+
+// Request object for reading gRPC log entries belonging to conversations.
+message ReadRequest {
+  // Filter by trace ID.
+  string trace_id = 1;
+  // Optionally filter by origin.
+  string origin = 2;
+}
+
+message ReadResponse { .grpc.binarylog.v1.GrpcLogEntry entry = 1; }

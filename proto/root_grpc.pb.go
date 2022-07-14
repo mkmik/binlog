@@ -101,3 +101,116 @@ var LogSinkService_ServiceDesc = grpc.ServiceDesc{
 	Streams:  []grpc.StreamDesc{},
 	Metadata: "root.proto",
 }
+
+// LogReaderServiceClient is the client API for LogReaderService service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+type LogReaderServiceClient interface {
+	Read(ctx context.Context, in *ReadRequest, opts ...grpc.CallOption) (LogReaderService_ReadClient, error)
+}
+
+type logReaderServiceClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewLogReaderServiceClient(cc grpc.ClientConnInterface) LogReaderServiceClient {
+	return &logReaderServiceClient{cc}
+}
+
+func (c *logReaderServiceClient) Read(ctx context.Context, in *ReadRequest, opts ...grpc.CallOption) (LogReaderService_ReadClient, error) {
+	stream, err := c.cc.NewStream(ctx, &LogReaderService_ServiceDesc.Streams[0], "/influxdata.grpc.binarylogsink.v1.LogReaderService/Read", opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &logReaderServiceReadClient{stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type LogReaderService_ReadClient interface {
+	Recv() (*ReadResponse, error)
+	grpc.ClientStream
+}
+
+type logReaderServiceReadClient struct {
+	grpc.ClientStream
+}
+
+func (x *logReaderServiceReadClient) Recv() (*ReadResponse, error) {
+	m := new(ReadResponse)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+// LogReaderServiceServer is the server API for LogReaderService service.
+// All implementations must embed UnimplementedLogReaderServiceServer
+// for forward compatibility
+type LogReaderServiceServer interface {
+	Read(*ReadRequest, LogReaderService_ReadServer) error
+	mustEmbedUnimplementedLogReaderServiceServer()
+}
+
+// UnimplementedLogReaderServiceServer must be embedded to have forward compatible implementations.
+type UnimplementedLogReaderServiceServer struct {
+}
+
+func (UnimplementedLogReaderServiceServer) Read(*ReadRequest, LogReaderService_ReadServer) error {
+	return status.Errorf(codes.Unimplemented, "method Read not implemented")
+}
+func (UnimplementedLogReaderServiceServer) mustEmbedUnimplementedLogReaderServiceServer() {}
+
+// UnsafeLogReaderServiceServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to LogReaderServiceServer will
+// result in compilation errors.
+type UnsafeLogReaderServiceServer interface {
+	mustEmbedUnimplementedLogReaderServiceServer()
+}
+
+func RegisterLogReaderServiceServer(s grpc.ServiceRegistrar, srv LogReaderServiceServer) {
+	s.RegisterService(&LogReaderService_ServiceDesc, srv)
+}
+
+func _LogReaderService_Read_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(ReadRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(LogReaderServiceServer).Read(m, &logReaderServiceReadServer{stream})
+}
+
+type LogReaderService_ReadServer interface {
+	Send(*ReadResponse) error
+	grpc.ServerStream
+}
+
+type logReaderServiceReadServer struct {
+	grpc.ServerStream
+}
+
+func (x *logReaderServiceReadServer) Send(m *ReadResponse) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+// LogReaderService_ServiceDesc is the grpc.ServiceDesc for LogReaderService service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var LogReaderService_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "influxdata.grpc.binarylogsink.v1.LogReaderService",
+	HandlerType: (*LogReaderServiceServer)(nil),
+	Methods:     []grpc.MethodDesc{},
+	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "Read",
+			Handler:       _LogReaderService_Read_Handler,
+			ServerStreams: true,
+		},
+	},
+	Metadata: "root.proto",
+}
