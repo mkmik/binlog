@@ -15,6 +15,9 @@ type DecodeCmd struct {
 	CmdCommon
 
 	CallID uint64 `optional:""`
+
+	// if true, decodes `data` into `decoded` to help with editing.
+	Expand bool `optional:""`
 }
 
 func (cmd *DecodeCmd) Run(cli *Context) error {
@@ -44,7 +47,7 @@ func (cmd *DecodeCmd) Run(cli *Context) error {
 		if err != nil {
 			return fmt.Errorf("cannot marshal dynamic proto: %w", err)
 		}
-		if e.Type == v1.GrpcLogEntry_EVENT_TYPE_CLIENT_MESSAGE {
+		if cmd.Expand && e.Type == v1.GrpcLogEntry_EVENT_TYPE_CLIENT_MESSAGE {
 			var unstructured map[string]any
 			if err := json.Unmarshal(res, &unstructured); err != nil {
 				return err
