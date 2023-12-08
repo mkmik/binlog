@@ -7,7 +7,7 @@ require (
 	github.com/jhump/protoreflect v1.15.4
 	github.com/mkmik/tail v0.1.1-0.20220421025734-052187293294
 	google.golang.org/grpc v1.57.1
-	google.golang.org/protobuf v1.31.1-0.20231207185723-3bfc0b01188d
+	google.golang.org/protobuf v1.31.1-0.20231208131814-e8baad6b6c9e
 )
 
 require (
