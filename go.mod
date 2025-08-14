@@ -5,7 +5,7 @@ go 1.18
 require (
 	github.com/alecthomas/kong v0.7.1
 	github.com/jhump/protoreflect v1.15.6
-	github.com/mkmik/tail v0.1.1-0.20220421025734-052187293294
+	github.com/mkmik/tail 7644d5e47fe8
 	google.golang.org/grpc v1.57.1
 	google.golang.org/protobuf v1.31.1-0.20231221224323-bfcd6476a38e
 )
