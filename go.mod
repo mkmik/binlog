@@ -1,13 +1,13 @@
 module mkm.pub/binlog
 
-go 1.18
+go 1.23
 
 require (
 	github.com/alecthomas/kong v0.7.1
 	github.com/jhump/protoreflect v1.15.6
 	github.com/mkmik/tail v0.1.1-0.20220421025734-052187293294
 	google.golang.org/grpc v1.57.1
-	google.golang.org/protobuf v1.31.1-0.20231221224323-bfcd6476a38e
+	google.golang.org/protobuf v1.36.11
 )
 
 require (
